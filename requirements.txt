@@ -1,0 +1,13 @@
+numpy
+openai
+openai-whisper @ git+https://github.com/openai/whisper.git
+pvporcupine
+PyAudio
+pycparser
+pygame
+soundfile
+SpeechRecognition
+torch
+tqdm
+certifi
+tiktoken
