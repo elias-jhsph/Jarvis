@@ -6,8 +6,9 @@ os.environ["SSL_CERT_FILE"] = certifi.where()
 
 r = sr.Recognizer()
 mic = sr.Microphone()
-r.non_speaking_duration = 0.02
-r.pause_threshold = 0.2
+r.non_speaking_duration = 0.2
+r.pause_threshold = 0.8
+
 
 def listen_to_user():
     with mic as source:

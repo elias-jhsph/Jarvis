@@ -133,3 +133,5 @@ dmypy.json
 output.wav
 .DS_Store
 .idea/
+dist/
+build/
