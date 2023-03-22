@@ -1,13 +1,17 @@
-import datetime
-import json
-import os.path
-
-import openai
-from keys import get_openai_key
 import tiktoken
+import time
+import openai
+import atexit
+from concurrent.futures import ThreadPoolExecutor
+from keys import get_openai_key
+from assistant_history import AssistantHistory
 
+# Set up logging
+import logger_config
+logger = logger_config.get_logger()
 
-history = None
+# Constants
+history_changed = False
 model = "gpt-3.5-turbo-0301"
 temperature = 0.8
 maximum_length_message = 500
@@ -15,66 +19,61 @@ maximum_length_history = 2800
 top_p = 1
 frequency_penalty = 0.19
 presence_penalty = 0
+history_path = "history.json"
+
 openai.api_key = get_openai_key()
 enc = tiktoken.encoding_for_model(model)
 assert enc.decode(enc.encode("hello world")) == "hello world"
 
-def get_system():
-    system = "You are Elias' AI Assistant named Jarvis. " \
-             "You are based on the character Jarvis from the Marvel Universe. " \
-             "The current date time is " + datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
-    if history != None:
-        total = 0
-        for message in history:
-            total += len(enc.encode(message["content"]))
-        system += ". Number of tokens in this conversation so far: "+str(total)
-    return {"role": "system", "content": system}
+# Setup background task system
+executor = ThreadPoolExecutor(max_workers=1)
+tasks = []
+
+# Load Assistant History
+history_access = AssistantHistory()
+history_access.load_history_from_json(history_path)
 
 
-def reduce_history():
-    global history
-    total = 0
-    for message in history:
-        total += len(enc.encode(message["content"]))
-    print("Tokens in history:",total)
-    if total > maximum_length_history:
-        first_user = None
-        for i, message in enumerate(history):
-            if first_user is None and message["role"] == "user":
-                first_user = i
-                break
-        if first_user is not None:
-            del history[i]
-        first_assistant = None
-        for i, message in enumerate(history):
-            if first_assistant is None and message["role"] == "assistant":
-                first_assistant = i
-                break
-        if first_assistant is not None:
-            del history[i]
-        reduce_history()
-    with open("history.json", "w") as f:
-        json.dump(history, f, indent=5)
-    return
-
-if os.path.exists("history.json"):
-    with open("history.json") as f:
-        history = json.load(f)
-    reduce_history
-else:
-    history = [get_system()]
+def refresh_assistant():
+    """
+    Updates the conversation history.
+    """
+    global history_changed
+    if history_changed:
+        logger.info("Refreshing history...")
+        history_access.reduce_context()
+        history_access.save_history_to_json(history_path)
+        logger.info("History saved")
+    history_changed = False
 
 
-def get_history():
-    history[0] = get_system()
-    return history
+def background_refresh_assistant():
+    """
+    Run the refresh_assistant function in the background and handle exceptions.
+
+    This function is intended to be used with ThreadPoolExecutor to prevent blocking the main thread
+    while refreshing conversation history.
+    """
+    try:
+        refresh_assistant()
+    except Exception as e:
+        logger.exception("Error reducing history in background:", e)
 
 
 def generate_response(query):
-    smart_add(query, "user")
+    """
+    Generate a response to the given query.
+
+    :param query: The user's input query.
+    :type query: str
+    :return: The AI Assistant's response.
+    :rtype: str
+    """
+    safe_wait()
+    history_access.add_user_query(query)
     response = openai.ChatCompletion.create(
         model=model,
-        messages=get_history(),
+        messages=history_access.gather_context(query)+[{"role": "user", "content": query}],
         temperature=temperature,
         max_tokens=maximum_length_message,
         top_p=top_p,
@@ -84,25 +83,61 @@ def generate_response(query):
     output = response['choices'][0]['message']['content']
     reason = response['choices'][0]["finish_reason"]
     if reason != "stop":
-        if reason == "length" or reason == "null":
-            del history[-1]
-            reduce_history()
+        if reason == "length":
+            history_access.add_assistant_response(output)
+            return output + "... I'm sorry, I have been going on and on haven't I?"
+        if reason == "null":
+            history_access.reset_add()
             return "I'm so sorry I got overwhelmed, can you put that more simply?"
         if reason == "content_filter":
+            history_access.add_assistant_response(output)
             output = "I am so sorry, but if I responded to that I would have been forced to say something naughty."
-    smart_add(output, "assistant")
+    schedule_refresh_assistant()
     return output
 
 
-def smart_add(query, role):
-    global history
-    total = len(enc.encode(query))
-    if total > maximum_length_history:
-        raise TypeError("That query is too long")
-    history.append({"role": role, "content": query})
-    reduce_history()
-    with open("history.json", "w") as f:
-        json.dump(history, f, indent=5)
+def schedule_refresh_assistant():
+    """
+    This function runs the refresh_history function in the background to prevent
+    blocking the main thread while updating the conversation history.
+    """
+    global executor, tasks, history_changed
+    history_changed = True
+    tasks.append(executor.submit(background_refresh_assistant))
     return
 
 
+def get_last_response():
+    """
+    Get the last response in the conversation history.
+
+    :return: A tuple containing the last user query and the last AI Assistant response.
+    :rtype: tuple
+    """
+    return history_access.get_history()[-1][1]
+
+
+def safe_wait():
+    """
+    Waits until all scheduled tasks are completed to run
+    """
+    global tasks
+    if tasks:
+        logger.info("Waiting for background tasks...")
+        for task in tasks:
+            task.result()
+        tasks = []
+        logger.info("Completed background tasks not generating...")
+
+
+def shutdown_executor():
+    """
+    Helps with grateful shutdown of executor in case of termination
+    """
+    global executor
+    if executor is not None:
+        executor.shutdown(wait=True)
+        executor = None
+
+
+atexit.register(shutdown_executor)

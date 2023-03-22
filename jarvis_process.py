@@ -1,111 +1,94 @@
 import ctypes.util
-import functools
 import os
-
-# print("Attempting to import pyaudio using patched `ctypes.util.find_library`...")
-# _find_library_original = ctypes.util.find_library
-# print("CWD:", os.getcwd())
-#
-#
-# @functools.wraps(_find_library_original)
-# def _find_library_patched(name):
-#     if name == "portaudio":
-#         return "libportaudio.so.2"
-#     else:
-#         return _find_library_original(name)
-#
-#
-# ctypes.util.find_library = _find_library_patched
-
 import pvporcupine
-import pyaudio
 import pygame
-
-
-# print("pyaudio import successful!")
-# print("Restoring original `ctypes.util.find_library`...")
-# ctypes.util.find_library = _find_library_original
-# del _find_library_patched
-# print("Original `ctypes.util.find_library` restored.")
-
 import struct
 import time
 import datetime
-import random
 
 from keys import get_pico_key, get_pico_path
-from audio_listener import listen_to_user
-from gpt_interface import generate_response
+from processor import processor
 from text_speech import text_to_speech
 
+# Configure logging
+import logger_config
+logger = logger_config.get_logger()
+
+# Set last time of request
 last_time = datetime.datetime.now() - datetime.timedelta(minutes=5)
 
 
-def booting_test():
+def _find_library_patched(name):
+    """
+    Patched version of ctypes.util.find_library to help importing pyaudio.
 
-    def wait(s):
-        while s.get_busy():
-            pygame.time.wait(100)
+    :param name: str, the name of the library to find
+    :return: str, the path to the library, if found, otherwise the result of the original find_library function
+    """
+    if name == "portaudio":
+        return "libportaudio.so.2"
+    else:
+        return _find_library_original(name)
 
-    pygame.mixer.init(channels=1, buffer=8196)
-    sound = pygame.mixer.music
-    sound.load('booting.wav')
-    sound.play()
-    wait(sound)
 
-    handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
-                                keyword_paths=[get_pico_path()])
+def import_pyaudio():
+    """
+    Import pyaudio with a patched version of ctypes.util.find_library.
+    """
+    logger.info("Attempting to import pyaudio using patched `ctypes.util.find_library`...")
+    global _find_library_original
+    _find_library_original = ctypes.util.find_library
 
-    pa = pyaudio.PyAudio()
-    info = pa.get_host_api_info_by_index(0)
-    numdevices = info.get('deviceCount')
-    inputs = 0
-    for i in range(0, numdevices):
-        if pa.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels') > 0:
-            inputs += 1
-            print("Input Device id ", i, " - ", pa.get_device_info_by_host_api_device_index(0, i).get('name'))
-    if inputs == 0:
-        raise Exception("No input (microphone) devices found")
-    try:
-        def get_next_audio_frame():
-            pcm = audio_stream.read(handle.frame_length)
-            pcm = struct.unpack_from("h" * handle.frame_length, pcm)
-            return pcm
+    ctypes.util.find_library = _find_library_patched
 
-        audio_stream = pa.open(rate=handle.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
-                               frames_per_buffer=handle.frame_length, input_device_index=None)
-        handle.process(get_next_audio_frame())
-        audio_stream.stop_stream()
-    except Exception as e:
-        print(e)
-        pygame.mixer.init(channels=1, buffer=8196)
-        sound = pygame.mixer.music
-        sound.load('mic_error.wav')
-        sound.play()
-        wait(sound)
-        raise Exception("Error when trying to listen to microphone.")
+    import pyaudio
+
+    logger.info("pyaudio import successful!")
+    logger.info("Restoring original `ctypes.util.find_library`...")
+    ctypes.util.find_library = _find_library_original
+    del _find_library_patched
+    logger.info("Original `ctypes.util.find_library` restored.")
+
+    return pyaudio
+
+
+if os.getcwd() != '/Users/eliasweston-farber/Desktop/Jarvis':
+    pyaudio = import_pyaudio()
+    from audio_listener import prep_mic, listen_to_user, convert_to_text
+else:
+    import pyaudio
+    from audio_listener import prep_mic, listen_to_user, convert_to_text
+
+
+def get_next_audio_frame(handle, audio_stream):
+    """
+    Read the next frame from the audio stream.
+
+    :param handle: The Porcupine handle
+    :param audio_stream: The pyaudio.PyAudio stream
+    :return: tuple, the unpacked PCM data
+    """
+
+    pcm = audio_stream.read(handle.frame_length)
+    pcm = struct.unpack_from("h" * handle.frame_length, pcm)
+    return pcm
+
+
+def wait(sound):
+    """
+    Wait for the sound to finish playing.
+
+    :param sound: The pygame.mixer.music instance
+    """
+    while sound.get_busy():
+        pygame.time.wait(100)
 
 
 def jarvis_process():
-    alternate_standard_files = ["yes.wav", "go_on.wav"]
-
-    def get_next_audio_frame():
-        pcm = audio_stream.read(handle.frame_length)
-        pcm = struct.unpack_from("h" * handle.frame_length, pcm)
-        return pcm
-
-    def get_standard_path():
-        global last_time
-        gap = datetime.datetime.now() - last_time
-        last_time = datetime.datetime.now()
-        if gap.seconds > 60 * 5:
-            return 'standard_response.wav'
-        else:
-            return random.choice(alternate_standard_files)
-
-    def wait(s):
-        while s.get_busy():
-            pygame.time.wait(100)
+    """
+    Main function to run the Jarvis voice assistant process.
+    """
+    global last_time
 
     handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
                                 keyword_paths=[get_pico_path()])
@@ -114,42 +97,45 @@ def jarvis_process():
 
     pygame.mixer.init(channels=1, buffer=8196)
     sound = pygame.mixer.music
-    sound.load("ready_in.wav")
+    sound.load("audio_files/tone_one.wav")
     sound.play()
     wait(sound)
-    time.sleep(0.5)
+
+    prep_mic()
 
     audio_stream = pa.open(rate=handle.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
                            frames_per_buffer=handle.frame_length, input_device_index=None)
 
     try:
         while True:
-            keyword_index = handle.process(get_next_audio_frame())
+            keyword_index = handle.process(get_next_audio_frame(handle, audio_stream))
             if keyword_index >= 0:
                 audio_stream.stop_stream()
-                time.sleep(0.1)
-                pygame.mixer.init(channels=1, buffer=8196)
-                sound = pygame.mixer.music
-                sound.load(get_standard_path())
-                sound.play()
-                wait(sound)
-                time.sleep(0.2)
                 try:
-                    print("listening...")
-                    query = listen_to_user()
-
-                    print("query", query)
-                    sound.load('processing.wav')
-                    sound.play(loops=3)
-                    print("processing...")
+                    logger.info("listening...")
+                    query_audio = listen_to_user()
+                    logger.info("adjusting mic for next time...")
+                    prep_mic()
+                    gap = datetime.datetime.now() - last_time
+                    last_time = datetime.datetime.now()
+                    if gap.seconds > 60 * 5:
+                        sound.load("audio_files/hmm.wav")
+                        sound.play()
+                        wait(sound)
+                    sound.load('audio_files/beeps.wav')
+                    sound.play(loops=7)
                     try:
-                        text = generate_response(query)
+                        logger.info("Recognizing...")
+                        query = convert_to_text(query_audio)
+                        logger.info("Query: %s", query)
+                        logger.info("Processing...")
+                        text = processor(query)
                     except TypeError as e:
-                        print(e)
+                        logger.error(e)
                         text = "I am so sorry, my circuits are all flustered, ask me again please."
-                    print("text", text)
+                    logger.info("Text: %s", text)
 
-                    print("Making audio response")
+                    logger.info("Making audio response")
                     audio_path = text_to_speech(text)
                     sound.fadeout(500)
                     sound.load(audio_path)
@@ -158,24 +144,47 @@ def jarvis_process():
                     os.remove(audio_path)
                     time.sleep(0.1)
                 except Exception as e:
-                    print(e)
+                    logger.error(e, exc_info=True)
+                    with open("inner_error.log", "w") as file:
+                        file.write(str(e))
                     audio_stream.stop_stream()
                     pygame.mixer.init(channels=1, buffer=8196)
                     sound = pygame.mixer.music
-                    sound.load('minor_error.wav')
+                    sound.load('audio_files/minor_error.wav')
                     sound.play()
                     wait(sound)
 
                 audio_stream = pa.open(rate=handle.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
                                        frames_per_buffer=handle.frame_length, input_device_index=None)
     except Exception as e:
-        print(e)
+        logger.error(e, exc_info=True)
+        with open("outer_error.log", "w") as file:
+            file.write(str(e))
         audio_stream.stop_stream()
         pygame.mixer.init(channels=1, buffer=8196)
         sound = pygame.mixer.music
-        sound.load('major_error.wav')
+        sound.load('audio_files/major_error.wav')
         sound.play()
         wait(sound)
+
+
+def test_mic():
+    """
+    Test the microphone before running the Jarvis voice assistant process.
+    """
+    logger.info("Testing mic...")
+    handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
+                                keyword_paths=[get_pico_path()])
+
+    pa = pyaudio.PyAudio()
+
+    prep_mic()
+
+    audio_stream = pa.open(rate=handle.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
+                           frames_per_buffer=handle.frame_length, input_device_index=None)
+    time.sleep(1)
+    audio_stream.stop_stream()
+    logger.info("Mic tested.")
 
 
 if __name__ == "__main__":
