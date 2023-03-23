@@ -14,6 +14,7 @@ https://console.picovoice.ai/ppn
 https://picovoice.ai/docs/quick-start/porcupine-python/
 https://platform.openai.com/docs/guides/speech-to-text/prompting
 https://camillovisini.com/article/create-macos-menu-bar-app-pomodoro/
+https://github.com/spatialaudio/python-sounddevice/issues/130
 
 # todo
 make for raspberry pie

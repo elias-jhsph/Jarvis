@@ -3,7 +3,7 @@ import json
 import os
 from collections import defaultdict
 import openai
-from keys import get_openai_key, get_user
+from connections import get_openai_key, get_user
 import tiktoken
 import spacy
 
@@ -27,7 +27,7 @@ openai.api_key = get_openai_key()
 enc = tiktoken.encoding_for_model(model)
 
 
-def _get_time():
+def get_time():
     """
     Get the current time as a string.
 
@@ -37,7 +37,7 @@ def _get_time():
     return "On "+datetime.datetime.now().strftime("%A, %B %-d, %Y at %-I:%M %p")+": "
 
 
-def summarizer(tuple_text):
+def summarizer(list_len_two):
     """
     Summarize a conversation by sending a query to the OpenAI API.
 
@@ -51,7 +51,7 @@ def summarizer(tuple_text):
                                          "or next steps)"}]
     response = openai.ChatCompletion.create(
         model=model,
-        messages=tuple_text+query,
+        messages=list_len_two+query,
         temperature=temperature,
         max_tokens=maximum_length_message,
         top_p=top_p,
@@ -90,6 +90,7 @@ def extract_keywords(text):
         if token.is_alpha and not token.is_stop:
             output.append(token)
     return output
+
 
 class AssistantHistory:
     """
@@ -140,7 +141,7 @@ class AssistantHistory:
         :param query: The user query to be added.
         :type query: str
         """
-        self.current_user_query = {"role": "user", "content": _get_time() + query}
+        self.current_user_query = {"role": "user", "content": get_time() + query}
 
     def add_assistant_response(self, response):
         """
@@ -151,7 +152,7 @@ class AssistantHistory:
         """
         if self.current_user_query is None:
             raise ValueError("No user query found. Add a user query before adding an assistant response.")
-        assistant_response = {"role": "assistant", "content": _get_time() + response}
+        assistant_response = {"role": "assistant", "content": get_time() + response}
         self._update_keywords(response, self.current_user_query)
         self._update_keywords(response, assistant_response)
         self.history.append((self.current_user_query, assistant_response))
@@ -168,7 +169,7 @@ class AssistantHistory:
         Reduce the conversation history by summarizing it.
         """
         for entry in self.history[len(self.reduced_history):]:
-            self.reduced_history.append(summarizer(entry))
+            self.reduced_history.append(summarizer([entry[0], entry[1]]))
 
     def _update_keywords(self, text, entry):
         """
@@ -267,4 +268,5 @@ class AssistantHistory:
             raw = json.load(f)
             self.history = raw["history"]
             self.reduced_history = raw["reduced_history"]
-            self.keywords = raw["keywords"]
+            default_factory = list
+            self.keywords = defaultdict(default_factory, raw["keywords"])

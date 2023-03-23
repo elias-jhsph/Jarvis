@@ -1,4 +1,5 @@
 import ctypes.util
+import functools
 import os
 import pvporcupine
 import pygame
@@ -6,7 +7,7 @@ import struct
 import time
 import datetime
 
-from keys import get_pico_key, get_pico_path
+from connections import get_pico_key, get_pico_path
 from processor import processor
 from text_speech import text_to_speech
 
@@ -18,26 +19,25 @@ logger = logger_config.get_logger()
 last_time = datetime.datetime.now() - datetime.timedelta(minutes=5)
 
 
-def _find_library_patched(name):
-    """
-    Patched version of ctypes.util.find_library to help importing pyaudio.
-
-    :param name: str, the name of the library to find
-    :return: str, the path to the library, if found, otherwise the result of the original find_library function
-    """
-    if name == "portaudio":
-        return "libportaudio.so.2"
-    else:
-        return _find_library_original(name)
-
-
 def import_pyaudio():
     """
     Import pyaudio with a patched version of ctypes.util.find_library.
     """
     logger.info("Attempting to import pyaudio using patched `ctypes.util.find_library`...")
-    global _find_library_original
     _find_library_original = ctypes.util.find_library
+
+    @functools.wraps(_find_library_original)
+    def _find_library_patched(name):
+        """
+        Patched version of ctypes.util.find_library to help importing pyaudio.
+
+        :param name: str, the name of the library to find
+        :return: str, the path to the library, if found, otherwise the result of the original find_library function
+        """
+        if name == "portaudio":
+            return "libportaudio.so.2"
+        else:
+            return _find_library_original(name)
 
     ctypes.util.find_library = _find_library_patched
 
@@ -129,6 +129,18 @@ def jarvis_process():
                         query = convert_to_text(query_audio)
                         logger.info("Query: %s", query)
                         logger.info("Processing...")
+                        audio_info = processor(query, return_audio_file=True)
+                        if audio_info:
+                            logger.info("Playing temporary audio...")
+                            if isinstance(audio_info, list):
+                                sound.load(audio_info[0])
+                                sound.play()
+                                wait(sound)
+                                sound.load(audio_info[1], loops=7)
+                                sound.play()
+                            else:
+                                sound.load(audio_info)
+                                sound.play()
                         text = processor(query)
                     except TypeError as e:
                         logger.error(e)

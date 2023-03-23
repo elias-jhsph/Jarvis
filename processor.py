@@ -1,9 +1,12 @@
 import re
+import json
 import html
 import logging
 from mailjet_rest import Client
-from keys import get_mj_key, get_mj_secret, get_emails
+from connections import get_mj_key, get_mj_secret, get_emails
 from gpt_interface import generate_response, get_last_response
+from internet_helper import create_internet_context
+from text_speech import text_to_speech
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,10 +46,11 @@ def remove_code_blocks(text):
                   re.sub("```[^```]+```", "(FYI I had some code here that I am not reading to save time)", text))
 
 
-def processor(raw_query):
+def processor(raw_query, return_audio_file=False):
     """
     Process the raw query and determine the appropriate action.
 
+    :param return_audio_file: bool, whether to see if there is some temp audio to play
     :param raw_query: str, the raw query string
     :return: str, the result of processing the query
     """
@@ -57,12 +61,39 @@ def processor(raw_query):
         raw_query[:50].lower().find("last message") >= 0)\
             and raw_query[:50].lower().find("email") >= 0:
         query, result = get_last_response()
-        email_processor("Jarvis responding to question: "+query, result)
+        if return_audio_file:
+            return None
+        return email_processor("Jarvis responding to question: "+query, result)
+
+    email_internet_search_texts = ["email me the following internet search",
+                                   "send me the following internet search",
+                                   "email me an internet search for the following",
+                                   "email me a web search for the following",
+                                   "email me a search for the following",
+                                   "email me an internet search for",
+                                   "email me a web search for",
+                                   "email me a search for",
+                                   ]
+    wants_email_internet = None
+    for test in email_internet_search_texts:
+        if raw_query[:50].lower().find(test) >= 0:
+            wants_email_internet = test
+            break
+    if wants_email_internet:
+        raw_query = raw_query[raw_query[:50].lower().find(test) + len(test):]
+        query = re.sub("^[^a-z|A-Z]+", "", raw_query)
+        if return_audio_file:
+            return text_to_speech('Searching the internet for your query, "'+query+'". This may take some time.')
+        response, data = internet_processor(query)
+        return email_processor("Jarvis searched for: " + query, response + "\n\n```" +
+                               json.dumps(data,indent=5) + "```")
 
     # Handle reminder-related queries
     if raw_query[:50].lower().find("following reminder") >= 0:
         reminder = clean_up_reminder(raw_query)
-        email_processor("Jarvis reminder: " + reminder, reminder)
+        if return_audio_file:
+            return text_to_speech("Emailing you the following reminder: "+reminder)
+        return email_processor("Jarvis reminder: " + reminder, reminder)
 
     # Handle other queries
     if raw_query[:50].lower().find("the following") >= 0:
@@ -70,25 +101,36 @@ def processor(raw_query):
         if raw_query[:50].lower().find("email me the following") >= 0 or \
                 raw_query[:50].lower().find("email the following") >= 0:
             query = clean_up_query(raw_query)
+            if return_audio_file:
+                return text_to_speech("Emailing you the answer to: "+query)
             return email_processor("Jarvis responding to question: "+query, generate_response(query))
 
         # Internet search-related queries
         if raw_query[:50].lower().find("internet search me the following") >= 0 or \
             raw_query[:50].lower().find("internet search the following") >= 0 or \
-                raw_query[:50].lower().find("search the internet for the following") >= 0:
-
-            return internet_processor(clean_up_query(raw_query))
-
+                raw_query[:50].lower().find("search the internet for the following") >= 0 or \
+                raw_query[:50].lower().find("search the following") >= 0:
+            query = clean_up_query(raw_query)
+            if return_audio_file:
+                return [text_to_speech('Searching the internet for your query, "'+query+'". This may take some time.'),
+                        "audio_files/searching.wav"]
+            response, data = internet_processor(query)
+            return response
+        if return_audio_file:
+            return None
         return "I think I misheard you, try again."
-
-    # Handle internet
-        # Handle internet search queries
     elif raw_query[:50].lower().find("internet search for") >= 0 or \
-             raw_query[:50].lower().find("search the internet for") >= 0:
+            raw_query[:50].lower().find("search the internet for") >= 0:
         raw_query = raw_query[raw_query[:25].lower().find(" for") + 13:]
-        return internet_processor(re.sub("^[^a-z|A-Z]+", "", raw_query))
-
+        query = re.sub("^[^a-z|A-Z]+", "", raw_query)
+        if return_audio_file:
+            return [text_to_speech('Searching the internet for your query, "'+query+'". This may take some time.'),
+                    "audio_files/searching.wav"]
+        response, data = internet_processor(query)
+        return response
     else:
+        if return_audio_file:
+            return None
         return remove_code_blocks(generate_response(raw_query))
 
 
@@ -212,6 +254,7 @@ def email_processor(subject, text):
             return "I am so sorry but I was unable to send you that email."
     return "Sent!"
 
+
 def test_email(email):
     """
     Send a test email to the specified email address.
@@ -250,6 +293,7 @@ def test_email(email):
             return "I am so sorry but I was unable to send you that email."
     return "Sent!"
 
+
 def internet_processor(raw_query):
     """
     Process an internet search query.
@@ -257,7 +301,6 @@ def internet_processor(raw_query):
     :param raw_query: str, the raw query string
     :return: str, the result of processing the internet search query
     """
-    # TODO: Implement internet search functionality
-    return "I am sorry I can't search the internet yet... " \
-           "But I will be able to as soon as Elias finishes the internet processor!"
+    context, data = create_internet_context(raw_query, result_number=5)
+    return generate_response(context), data
 

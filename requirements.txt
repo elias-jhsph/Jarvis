@@ -9,9 +9,12 @@ PyAudio
 tiktoken
 pvporcupine
 SpeechRecognition
-google-api-core
+google-api-python-client
 google-cloud-texttospeech
 certifi
 soundfile
 pipdeptree
 spacy
+beautifulsoup4
+keyring
+PyQt5

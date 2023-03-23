@@ -1,9 +1,8 @@
 import tiktoken
-import time
 import openai
 import atexit
 from concurrent.futures import ThreadPoolExecutor
-from keys import get_openai_key
+from connections import get_openai_key
 from assistant_history import AssistantHistory
 
 # Set up logging
@@ -92,6 +91,8 @@ def generate_response(query):
         if reason == "content_filter":
             history_access.add_assistant_response(output)
             output = "I am so sorry, but if I responded to that I would have been forced to say something naughty."
+    else:
+        history_access.add_assistant_response(output)
     schedule_refresh_assistant()
     return output
 
@@ -127,7 +128,7 @@ def safe_wait():
         for task in tasks:
             task.result()
         tasks = []
-        logger.info("Completed background tasks not generating...")
+        logger.info("Completed background tasks! now generating...")
 
 
 def shutdown_executor():

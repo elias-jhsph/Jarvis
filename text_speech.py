@@ -1,19 +1,21 @@
 from google.cloud import texttospeech
 from google.oauth2 import service_account
-from keys import get_gcp_path
+from connections import get_gcp_data
+import re
 
 # Setup logging
 import logger_config
 logger = logger_config.get_logger()
 
 # Load service account credentials
-sa_creds = service_account.Credentials.from_service_account_file(get_gcp_path())
+sa_creds = service_account.Credentials.from_service_account_info(get_gcp_data())
 
 # Instantiate a Text-to-Speech client
 client = texttospeech.TextToSpeechClient(credentials=sa_creds)
 
 
 def text_to_speech(text: str) -> str:
+    text = re.sub("`", "", text)
     """
     Convert the given text to speech and save the result as an audio file.
 

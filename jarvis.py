@@ -5,10 +5,9 @@ import time
 import subprocess
 import rumps
 import jarvis_process
-import logging
 import logger_config
 
-logger = logging.getLogger(__name__)
+logger = logger_config.get_logger()
 
 
 class JarvisApp:
@@ -29,12 +28,23 @@ class JarvisApp:
         self.start_pause_button = rumps.MenuItem(title=self.config["start"], callback=self.start_listener)
         self.stop_button = rumps.MenuItem(title=self.config["stop"], callback=self.stop_listener)
         self.quit_button = rumps.MenuItem(title=self.config["quit"], callback=self.quit_listener)
-        self.app.menu = [self.start_pause_button, self.stop_button, self.quit_button]
+        self.settings_button = rumps.MenuItem(title='Settings', callback=self.settings_listener)
+        self.app.menu = [
+            self.start_pause_button,
+            self.stop_button,
+            self.settings_button,
+            self.quit_button
+        ]
         self.ps = None
         self.jarvis_process_path = None
         self._set_environment()
         logger.info("Testing microphone")
         jarvis_process.test_mic()
+
+    def settings_listener(self, sender):
+        """Opens the settings pop-up menu."""
+        settings_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings_menu.py')
+        subprocess.Popen([sys.executable, settings_script_path])
 
     def _set_up_menu(self):
         """Sets up the app's menu."""
@@ -94,7 +104,7 @@ class JarvisApp:
         logger.info("Safely killing process")
         if self.ps is not None:
             self.ps.terminate()
-            time.sleep(1.4)
+            time.sleep(4)
             if self.ps.poll() is None:
                 logger.warning("Had to hard kill process!")
                 self.ps.kill()
