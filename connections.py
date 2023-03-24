@@ -25,13 +25,30 @@ if os.path.exists('config_data.json'):
 
     server_info = json.loads(configuration)
 
-    for serve, info in server_info.items():
-        if serve == "gcp" or serve == "emails":
-            server_access.set_password("jarvis_app", serve, base64.b64encode(json.dumps(info).encode()).decode())
-        else:
-            server_access.set_password("jarvis_app", serve, info)
+    server_access.set_password("jarvis_app", "data", base64.b64encode(json.dumps(server_info).encode()).decode())
+
 #####REMOVE#####
+
 import keyring as server_access
+
+connection_data = server_access.get_password("jarvis_app", "data")
+if connection_data is not None:
+    connections_ring = json.loads(base64.b64decode(connection_data).decode())
+else:
+    connections_ring = {}
+
+
+def get_connection(key):
+    if key in connections_ring:
+        return connections_ring[key]
+    return None
+
+
+def set_connection(key, value):
+    global connections_ring
+    connections_ring[key] = value
+    connections_ring_ready = base64.b64encode(json.dumps(connections_ring).encode()).decode()
+    server_access.set_password("jarvis_app", "data", connections_ring_ready)
 
 
 class ConnectionKeyError(Exception):
@@ -41,63 +58,63 @@ class ConnectionKeyError(Exception):
 
 
 def get_pico_key():
-    pico_key = server_access.get_password("jarvis_app", 'pico')
+    pico_key = get_connection('pico')
     if pico_key is None:
         raise ConnectionKeyError('pico')
     return pico_key
 
 
 def get_openai_key():
-    openai_key = server_access.get_password("jarvis_app", 'openai')
+    openai_key = get_connection('openai')
     if openai_key is None:
         raise ConnectionKeyError('openai')
     return openai_key
 
 
 def get_pico_path():
-    os_key = server_access.get_password("jarvis_app", 'os')
+    os_key = get_connection('os')
     if os_key is None:
         raise ConnectionKeyError('os')
     return os.getcwd() + "/Jarvis_en_" + os_key + "_v2_1_0.ppn"
 
 
 def get_mj_key():
-    mj_key = server_access.get_password("jarvis_app", 'mj_key')
+    mj_key = get_connection('mj_key')
     if mj_key is None:
         raise ConnectionKeyError('mj_key')
     return mj_key
 
 
 def get_mj_secret():
-    mj_secret = server_access.get_password("jarvis_app", 'mj_secret')
+    mj_secret = get_connection('mj_secret')
     if mj_secret is None:
         raise ConnectionKeyError('mj_secret')
     return mj_secret
 
 
 def get_emails():
-    emails = server_access.get_password("jarvis_app", 'emails')
+    emails = get_connection('emails')
     if emails is None:
         raise ConnectionKeyError('emails')
-    return emails.split(",")
+    return emails
 
 
 def get_user():
-    user = server_access.get_password("jarvis_app", 'user')
+    user = get_connection('user')
     if user is None:
         raise ConnectionKeyError('user')
     return user
 
 
 def get_gcp_data():
-    gcp_encoded = server_access.get_password("jarvis_app", 'gcp')
-    if gcp_encoded is None:
+    gcp = get_connection('gcp')
+    if gcp is None:
         raise ConnectionKeyError('gcp')
-    return json.loads(base64.b64decode(gcp_encoded).decode())
+    return gcp
 
 
 def get_google():
-    google_key = server_access.get_password("jarvis_app", 'google')
+    google_key = get_connection('google')
     if google_key is None:
         raise ConnectionKeyError('google')
     return google_key
@@ -111,11 +128,11 @@ class ConnectionKeyInvalid(Exception):
 
 # API validation functions
 def is_valid_pico_key(pico_key):
-    # Replace this URL with the appropriate endpoint for Pico API key validation
-    url = "https://api.pico.example.com/validate_key"
-    headers = {"Authorization": f"Bearer {pico_key}"}
-    response = requests.get(url, headers=headers)
-    return response.status_code == 200
+    import pvporcupine
+    handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
+                                keyword_paths=[get_pico_path()])
+    del handle
+    return
 
 
 def is_valid_openai_key(openai_key):
@@ -127,22 +144,24 @@ def is_valid_openai_key(openai_key):
 
 # Setters with advanced input validation
 def set_pico_key(pico_key):
-    if not is_valid_pico_key(pico_key):
+    try:
+        is_valid_pico_key(pico_key)
+    except Exception as e:
         raise ConnectionKeyInvalid('Pico')
-    server_access.set_password("jarvis_app", 'pico', pico_key)
+    set_connection('pico', pico_key)
 
 
 def set_openai_key(openai_key):
     if not is_valid_openai_key(openai_key):
         raise ConnectionKeyInvalid('OpenAI')
-    server_access.set_password("jarvis_app", 'openai', openai_key)
+    set_connection('openai', openai_key)
 
 
 def set_pico_path(pico_path):
     if not os.path.exists(pico_path):
         raise ConnectionKeyInvalid('PICO Model file')
     os_key = pico_path.split("Jarvis_en_")[-1].split("_v2_1_0.ppn")[0]
-    server_access.set_password("jarvis_app", 'os', os_key)
+    set_connection('os', os_key)
 
 
 def set_mj_key_and_secret(mj_key, mj_secret):
@@ -152,8 +171,8 @@ def set_mj_key_and_secret(mj_key, mj_secret):
         result = mailjet.contact.get()
     except Exception as e:
         raise ConnectionKeyInvalid('Mailjet')
-    server_access.set_password("jarvis_app", 'mj_key', mj_key)
-    server_access.set_password("jarvis_app", 'mj_secret', mj_secret)
+    set_connection('mj_key', mj_key)
+    set_connection('mj_secret', mj_secret)
 
 
 def set_emails(emails):
@@ -161,27 +180,29 @@ def set_emails(emails):
     for email in emails:
         if email.find("@") < 0:
             raise ConnectionKeyInvalid('Bad Email')
-    emails = ",".join(emails)
-    server_access.set_password("jarvis_app", 'emails', emails)
+    set_connection('emails', emails)
 
 
 def set_user(user):
     if len(user) == 0:
         raise ConnectionKeyInvalid('User Name')
-    server_access.set_password("jarvis_app", 'user', user)
+    set_connection('user', user)
 
 
-def set_gcp_data(gcp_data_path):
-    if not os.path.exists(gcp_data_path):
-        raise ConnectionKeyInvalid('GCP json file')
-    with open(gcp_data_path, 'r') as file:
-        gcp_data = json.load(file)
+def set_gcp_data(gcp_data_path, data=False):
+    if not data:
+        if not os.path.exists(gcp_data_path):
+            raise ConnectionKeyInvalid('GCP json file')
+        with open(gcp_data_path, 'r') as file:
+            gcp_data = json.load(file)
+    else:
+        gcp_data = gcp_data_path
     try:
         from google.cloud import texttospeech
         from google.oauth2 import service_account
         sa_creds = service_account.Credentials.from_service_account_info(gcp_data)
         client = texttospeech.TextToSpeechClient(credentials=sa_creds)
-        synthesis_input = texttospeech.SynthesisInput(text=text)
+        synthesis_input = texttospeech.SynthesisInput(text="test")
         voice = texttospeech.VoiceSelectionParams(
             {"language_code": "en-GB", "name": "en-GB-Neural2-B"}
         )
@@ -195,9 +216,43 @@ def set_gcp_data(gcp_data_path):
         )
     except Exception as e:
         raise ConnectionKeyInvalid('GCP JSON FILE')
-    gcp_encoded = base64.b64encode(json.dumps(gcp_data).encode()).decode()
-    server_access.set_password("jarvis_app", 'gcp', gcp_encoded)
+    set_connection('gcp', gcp_data)
 
 
 def set_google(google_key):
-    server_access.set_password("jarvis_app", 'google', google_key)
+    set_connection('google', google_key)
+
+
+def find_setters_that_throw_errors():
+    getters = [
+        'get_pico_key', 'get_openai_key', 'get_pico_path', 'get_mj_key', 'get_mj_secret',
+        'get_emails', 'get_user', 'get_gcp_data', 'get_google'
+    ]
+
+    setters = [
+        'set_pico_key', 'set_openai_key', 'set_pico_path', 'set_mj_key_and_secret', 'set_emails',
+        'set_user', 'set_gcp_data', 'set_google'
+    ]
+
+    error_setters = []
+
+    for setter in setters:
+        getter_name = setter.replace("set_", "get_")
+        if getter_name in getters:
+            try:
+                value = eval(getter_name + "()")
+                if getter_name == "get_emails":
+                    value = ','.join(value)
+                    eval(setter + f"({value!r})")
+                elif getter_name == "get_gcp_data":
+                    eval(setter + f"({value}, data=True)")
+                elif "mj_key" in getter_name:
+                    secret = eval("get_mj_secret()")
+                    eval(setter + f"({value!r}, {secret!r})")
+                else:
+                    eval(setter + f"({value!r})")
+            except Exception as e:
+                error_setters.append(setter)
+
+    return error_setters
+

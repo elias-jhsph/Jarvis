@@ -69,7 +69,7 @@ def summarize(content):
 
 def rank_relevance(url, summary, query):
     prompt = f"Given the query '{query}', rate the relevance of this summary from 1 (not relevant) to 10 (highly " \
-             f"relevant):\nURL: {url}\nSummary: {summary}\n Relevance:"
+             f"relevant):\nURL: {url}\nSummary: {summary}\nRelevance: "
     response = openai.Completion.create(
         engine=base_model,
         prompt=prompt,
@@ -78,7 +78,25 @@ def rank_relevance(url, summary, query):
         stop=None,
         temperature=0.8,
     )
-    relevance = int(response.choices[0].text.strip())
+    raw = response.choices[0].text.strip()
+    if raw.isdigit():
+        relevance = int(raw)
+    else:
+        prompt = f"Given the query '{query}', rate the relevance of this summary from 1 (not relevant) to 10 (highly " \
+                 f"relevant) (for example - Relevance: INSERT_NUMBER):\nURL: {url}\nSummary: {summary}\nRelevance: "
+        response = openai.Completion.create(
+            engine=base_model,
+            prompt=prompt,
+            max_tokens=2,
+            n=1,
+            stop=None,
+            temperature=0.8,
+        )
+        raw = response.choices[0].text.strip()
+        if raw.isdigit():
+            relevance = int(raw)
+        else:
+            return -1
     return relevance
 
 

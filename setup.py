@@ -160,7 +160,6 @@ OPTIONS = {
         'google.protobuf',
         'google.proto',
         'google_auth_httplib2',
-        #'jaraco',
     ]
 }
 

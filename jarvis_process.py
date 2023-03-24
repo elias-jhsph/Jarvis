@@ -136,8 +136,8 @@ def jarvis_process():
                                 sound.load(audio_info[0])
                                 sound.play()
                                 wait(sound)
-                                sound.load(audio_info[1], loops=7)
-                                sound.play()
+                                sound.load(audio_info[1])
+                                sound.play(loops=7)
                             else:
                                 sound.load(audio_info)
                                 sound.play()
