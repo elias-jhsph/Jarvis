@@ -1,3 +1,4 @@
+from google.api_core.exceptions import InvalidArgument
 from google.cloud import texttospeech
 from google.oauth2 import service_account
 from connections import get_gcp_data
@@ -41,9 +42,18 @@ def text_to_speech(text: str) -> str:
 
     # Perform the text-to-speech request on the text input with the selected
     # voice parameters and audio file type
-    response = client.synthesize_speech(
-        input=synthesis_input, voice=voice, audio_config=audio_config
-    )
+    try:
+        response = client.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
+    except InvalidArgument as e:
+        logger.warning(f'Sentence is too long to TTS: "{text}"')
+        new = split_longest_sentence(text)
+        if new != text:
+            return text_to_speech(new)
+        else:
+            raise Exception("Can not shrink long sentence enough to turn to text")
+
 
     # Save the binary audio content to a file
     output_file = "output.wav"
@@ -52,3 +62,51 @@ def text_to_speech(text: str) -> str:
         logger.info(f'Audio content written to file "{output_file}"')
 
     return output_file
+
+
+import re
+
+
+def find_longest_sentence(text):
+    # Split the text into sentences using regex
+    sentences = re.split(r' *[\.\?!][\'"\)\]]* *', text)
+
+    # Find the longest sentence
+    longest_sentence = max(sentences, key=len)
+
+    return longest_sentence
+
+
+def split_longest_sentence(text, max_length=200):
+    # Find the longest sentence
+    longest_sentence = find_longest_sentence(text)
+
+    # Split the longest sentence into chunks
+    chunks = split_sentence(longest_sentence, max_length)
+
+    # Replace the longest sentence in the text with the smaller sentences
+    new_longest_sentence = '. '.join(chunks)
+    modified_text = text.replace(longest_sentence, new_longest_sentence)
+
+    return modified_text
+
+
+def split_sentence(sentence, max_length=200):
+    if len(sentence) <= max_length:
+        return [sentence]
+
+    words = sentence.split()
+    chunks = []
+    current_chunk = []
+
+    for word in words:
+        if len(" ".join(current_chunk) + " " + word) <= max_length:
+            current_chunk.append(word)
+        else:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [word]
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+
+    return chunks

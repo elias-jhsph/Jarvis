@@ -59,7 +59,7 @@ format = defines.get("format", "UDBZ")  # noqa: F821
 # compression_level = 9
 
 # Volume size
-size = defines.get("size", "2g")  # noqa: F821
+size = defines.get("size", "3g")  # noqa: F821
 
 # Files to include
 files = [application]

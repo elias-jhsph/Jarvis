@@ -27,12 +27,12 @@ def refine_query(query):
                "will go directly into google. Here is a helpful reminder of google tools you can use.\n"
                'Quotes (""): Use quotes to search for an exact phrase or word order.\n'
                "Minus (-): Exclude a specific word from your search.\n"
-               "Site: (site:): Search for content within a specific website.\n"
                "Asterisk (*): Use as a placeholder for unknown words.\n"
                "OR: Search for multiple terms or phrases.\n"
                "intitle: (intitle:): Search for words specifically in the title of webpages.\n"
                "intext: (intext:): Search for words specifically in the body of webpages.\n"
-               "(Note: DO NOT SURROUND QUERY BY QUOTES)\n Query:",
+               "Note: Do not be so specific in your search that you miss the general point of the query. Also "
+               "DO NOT SURROUND THE ENTIRE QUERY BY QUOTES.\n Query:",
         max_tokens=50,
         n=1,
         stop=None,
@@ -173,16 +173,19 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
     )
 
     prompt = (
-        f"I am an AI language model that has conducted an internet search for '{refined_query}'. "
+        f"Pretend I am an AI language model that has conducted an internet search for '{refined_query}'. "
         f"I have synthesized the following information from the search results: '{synthesized_information}'. "
         f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text}\n\n"
-        f"Please analyze these results and provide the most appropriate response, considering the following options: "
+        f"Please analyze these results and provide the most appropriate response. Consider the following options: "
         f"1. Pass along the final summary\n"
         f"2. Provide a very short final answer\n"
         f"3. Suggest specific websites for further reading\n"
         f"4. Recommend a deeper search or further inquiry\n"
         f"5. Offer color commentary on the findings\n"
         f"6. Combine any of the above options.\n"
+        f"NOTE: Give me the exact response that you would have me give the user. "
+        f"Assume the user doesn't have access to these results so any component you want to refer to"
+        f"remember to reiterate it for the user!"
     )
 
     tokens = enc.encode(prompt)
@@ -192,7 +195,7 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
         if len(new) < diff+10:
             raise Exception("Could not shrink internet final prompt within limit!")
         prompt = (
-            f"I am an AI language model that has conducted an internet search for '{refined_query}'. "
+            f"Pretend I am an AI language model that has conducted an internet search for '{refined_query}'. "
             f"I have synthesized the following information from the search results: '{synthesized_information}'. "
             f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text[:-(diff+10)]}\n\n"
             f"Please analyze these results and provide the most appropriate response. Consider the following options: "
@@ -202,6 +205,9 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
             f"4. Recommend a deeper search or further inquiry\n"
             f"5. Offer color commentary on the findings\n"
             f"6. Combine any of the above options.\n"
+            f"NOTE: Give me the exact response that you would have me give the user. "
+            f"Assume the user doesn't have access to these results so any component you want to refer to"
+            f"remember to reiterate it for the user!"
         )
     return prompt
 

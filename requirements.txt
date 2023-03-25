@@ -18,3 +18,4 @@ spacy
 beautifulsoup4
 keyring
 PyQt5
+scikit-learn

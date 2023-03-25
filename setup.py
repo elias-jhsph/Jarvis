@@ -5,7 +5,7 @@ import subprocess
 import sys
 import logging
 from setuptools import setup, find_packages
-import EXCLUDE
+
 
 # Set up a logger
 logging.basicConfig(level=logging.INFO,
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Modify connections
 PUBLIC = False
+
 if PUBLIC:
     with open("connections_INTERNAL.py", "r") as f:
         code = f.read()
@@ -22,12 +23,16 @@ if PUBLIC:
         f.write(re.sub("#####REMOVE#####[\s\S]+?#####REMOVE#####","",code))
     os.rename("history.json", "private_history.json")
     with open("connections.py", "w") as f:
-        json.dump({"history": [], "reduced_history": [], "keywords": {}}, f)
+        json.dump({"history": [], "reduced_history": [], "keywords": {}, "long_term_memory": ""}, f)
 else:
+    import EXCLUDE
     with open("connections_INTERNAL.py", "r") as f:
         code = f.read()
     with open("connections.py", "w") as f:
         f.write(code)
+    if not os.path.exists("history.json"):
+        with open("history.json", "w") as f:
+            json.dump({"history": [], "reduced_history": [], "keywords": {}, "long_term_memory": ""}, f)
 
 sys.setrecursionlimit(2000)
 
@@ -46,6 +51,8 @@ PACKAGE_NAME_MAPPING = {
     'speechrecognition': 'speech_recognition',
     'six': 'six',
     'soundfile': 'soundfile',
+    'scikit-learn': 'sklearn',
+    'threadpoolctl': 'SKIP',
     'ffmpeg-python': 'ffmpeg',
     'openai-whisper': 'whisper',
     'typing-extensions': 'typing_extensions',
@@ -126,19 +133,22 @@ def find_packages_improved():
 APP = ['jarvis.py']
 
 DATA_FILES = [
-    'Jarvis_en_linux_v2_1_0.ppn', 'jarvis_process.py', 'Jarvis_en_mac_v2_1_0.ppn', 'gpt_interface.py',
-    'config_data.json', 'text_speech.py', 'history.json', 'connections.py', 'logger_config.py', 'requirements.txt',
+    'Jarvis_en_linux_v2_1_0.ppn', 'Jarvis_en_mac_v2_1_0.ppn', 'config_data.json', 'jarvis_process.py',
+    'gpt_interface.py', 'text_speech.py', 'history.json', 'connections.py', 'logger_config.py', 'requirements.txt',
     'audio_listener.py', 'icon.icns', 'processor.py', 'internet_helper.py',
-    'assistant_history.py', 'logger_config.py', 'settings_menu.py',
+    'assistant_history.py', 'logger_config.py', 'settings_menu.py', 'subprocess_access.py',
     ("audio_files", ['audio_files/beeps.wav', 'audio_files/booting.wav', 'audio_files/go_on.wav',
                      'audio_files/hmm.wav', 'audio_files/listening.wav', 'audio_files/major_error.wav',
                      'audio_files/mic_error.wav', 'audio_files/minor_error.wav', 'audio_files/processing.wav',
                      'audio_files/ready_in.wav', 'audio_files/standard_response.wav', 'audio_files/thinking.wav',
                      'audio_files/tone_one.wav', 'audio_files/tone_two.wav', 'audio_files/yes.wav',
-                     "audio_files/searching.wav"
+                     "audio_files/searching.wav", 'audio_files/connection_error.wav'
                      ]),
     ('../Frameworks', ['venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_x86_64.dylib'])
     ]
+
+if PUBLIC:
+    DATA_FILES = DATA_FILES[3:]
 
 OPTIONS = {
     'argv_emulation': True,

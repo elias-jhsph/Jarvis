@@ -5,7 +5,7 @@ This README provides instructions on how to install, set up, and use a simple vo
 ## Installation
 
 1. Clone or download the repository.
-2. Set up the environment using a virtual environment:
+2. Set up the environment using a virtual environment for python 3.10:
 ```
 brew install portaudio
 pip install -r requirements.txt
@@ -22,6 +22,11 @@ dmgbuild -s settings.py -D app=dist/Jarvis.app "Jarvis" dist/jarvis_installer.dm
 
    
 ## Usage
+
+1. launch the app (this make take some time as the app runs self diagnostics)
+2. select start listening (this also may take some time)
+3. wait for the tone to play
+4. now when you say the wake word "Jarvis" you can start talking to Jarvis (Note: it may help to pause very briefly between saying the wake word and starting your query)
 
 The app automatically listens for the wake word "Jarvis." Once activated, you can use the following voice commands to perform various actions:
 

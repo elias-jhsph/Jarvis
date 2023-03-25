@@ -30,25 +30,46 @@ if os.path.exists('config_data.json'):
 #####REMOVE#####
 
 import keyring as server_access
+import subprocess_access
 
-connection_data = server_access.get_password("jarvis_app", "data")
-if connection_data is not None:
-    connections_ring = json.loads(base64.b64decode(connection_data).decode())
-else:
-    connections_ring = {}
+connections_ring = {}
+
+
+def get_connection_ring():
+    global connections_ring
+    if connections_ring == {}:
+        if subprocess_access.getter():
+            connections_ring = subprocess_access.getter()
+        else:
+            connection_data = server_access.get_password("jarvis_app", "data")
+            if connection_data is not None:
+                connections_ring = json.loads(base64.b64decode(connection_data).decode())
+            else:
+                connections_ring = {}
+
+
+get_connection_ring()
 
 
 def get_connection(key):
+    get_connection_ring()
     if key in connections_ring:
         return connections_ring[key]
     return None
+
+
+def get_connections_zip():
+    global connections_ring
+    get_connection_ring()
+    return base64.b64encode(json.dumps(connections_ring).encode()).decode()
 
 
 def set_connection(key, value):
     global connections_ring
     connections_ring[key] = value
     connections_ring_ready = base64.b64encode(json.dumps(connections_ring).encode()).decode()
-    server_access.set_password("jarvis_app", "data", connections_ring_ready)
+    if not subprocess_access.getter():
+        server_access.set_password("jarvis_app", "data", connections_ring_ready)
 
 
 class ConnectionKeyError(Exception):
@@ -246,11 +267,13 @@ def find_setters_that_throw_errors():
                     eval(setter + f"({value!r})")
                 elif getter_name == "get_gcp_data":
                     eval(setter + f"({value}, data=True)")
-                elif "mj_key" in getter_name:
-                    secret = eval("get_mj_secret()")
-                    eval(setter + f"({value!r}, {secret!r})")
                 else:
                     eval(setter + f"({value!r})")
+            except Exception as e:
+                error_setters.append(setter)
+        else:
+            try:
+                set_mj_key_and_secret(get_mj_key(), get_mj_secret())
             except Exception as e:
                 error_setters.append(setter)
 

@@ -59,20 +59,24 @@ def background_refresh_assistant():
         logger.exception("Error reducing history in background:", e)
 
 
-def generate_response(query):
+def generate_response(query, query_history_role="user", query_role="user"):
     """
     Generate a response to the given query.
 
     :param query: The user's input query.
     :type query: str
+    :param query_role: defaults to "user" but can be "assistant" or "system"
+    :type query_role: str
+    :param query_history_role: defaults to "user" but can be "assistant" or "system"
+    :type query_history_role: str
     :return: The AI Assistant's response.
     :rtype: str
     """
     safe_wait()
-    history_access.add_user_query(query)
+    history_access.add_user_query(query, role=query_history_role)
     response = openai.ChatCompletion.create(
         model=model,
-        messages=history_access.gather_context(query)+[{"role": "user", "content": query}],
+        messages=history_access.gather_context(query)+[{"role": query_role, "content": query}],
         temperature=temperature,
         max_tokens=maximum_length_message,
         top_p=top_p,

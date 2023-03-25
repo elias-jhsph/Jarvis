@@ -4,11 +4,13 @@ import signal
 import time
 import subprocess
 import rumps
-import jarvis_process
+import connections
+import settings_menu
+from concurrent.futures import ThreadPoolExecutor
 import logger_config
 
 logger = logger_config.get_logger()
-
+executor = ThreadPoolExecutor(max_workers=1)
 
 class JarvisApp:
     """Main class for the Jarvis application."""
@@ -36,15 +38,17 @@ class JarvisApp:
             self.quit_button
         ]
         self.ps = None
+        self.settings = None
         self.jarvis_process_path = None
         self._set_environment()
-        logger.info("Testing microphone")
-        jarvis_process.test_mic()
 
     def settings_listener(self, sender):
         """Opens the settings pop-up menu."""
-        settings_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings_menu.py')
-        subprocess.Popen([sys.executable, settings_script_path])
+        if self.settings is None:
+            self.settings = executor.submit(settings_menu.main())
+        else:
+            if not self.settings.running():
+                self.settings = executor.submit(settings_menu.main())
 
     def _set_up_menu(self):
         """Sets up the app's menu."""
@@ -70,12 +74,14 @@ class JarvisApp:
         if sender.title.lower().startswith(("start", "continue")):
             if self.ps is None or self.ps.poll() is not None:
                 logger.info("Booting process...")
-                self.ps = subprocess.Popen([sys.executable, self.jarvis_process_path], env=os.environ.copy())
+                self.ps = subprocess.Popen([sys.executable, self.jarvis_process_path,
+                                            connections.get_connections_zip()], env=os.environ.copy())
             else:
                 if self.ps is not None and self.ps.poll() is None:
                     os.kill(self.ps.pid, signal.SIGCONT)
                 else:
-                    self.ps = subprocess.Popen([sys.executable, self.jarvis_process_path], env=os.environ.copy())
+                    self.ps = subprocess.Popen([sys.executable, self.jarvis_process_path,
+                                                connections.get_connections_zip()], env=os.environ.copy())
             sender.title = self.config["pause"]
         else:
             sender.title = self.config["continue"]
@@ -92,6 +98,8 @@ class JarvisApp:
         """Quits the application."""
         logger.info("Quitting application")
         self._safe_kill()
+        if self.settings.running():
+            self.settings.cancel()
         rumps.quit_application()
 
     def run(self):

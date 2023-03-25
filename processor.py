@@ -108,6 +108,7 @@ def processor(raw_query, return_audio_file=False):
         # Internet search-related queries
         if raw_query[:50].lower().find("internet search me the following") >= 0 or \
             raw_query[:50].lower().find("internet search the following") >= 0 or \
+                raw_query[:50].lower().find("internet search for the following") >= 0 or \
                 raw_query[:50].lower().find("search the internet for the following") >= 0 or \
                 raw_query[:50].lower().find("search the following") >= 0:
             query = clean_up_query(raw_query)
@@ -302,5 +303,5 @@ def internet_processor(raw_query):
     :return: str, the result of processing the internet search query
     """
     context, data = create_internet_context(raw_query, result_number=5)
-    return generate_response(context), data
+    return generate_response(context, query_history_role="assistant"), data
 
