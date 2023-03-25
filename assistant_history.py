@@ -212,8 +212,8 @@ class AssistantHistory:
         Reduce the conversation history by summarizing it.
         """
         for entry in self.history[len(self.reduced_history):]:
-            to_reduce = [entry[0], entry[1]]
-            new_summary = summarizer(_strip_entry(to_reduce))
+            to_reduce = [_strip_entry(entry[0]), _strip_entry(entry[1])]
+            new_summary = summarizer(to_reduce)
             self.reduced_history.append(new_summary)
         self.long_term_memory = summarizer(self.gather_context("", only_summaries=True))["content"]
 
@@ -349,7 +349,10 @@ class AssistantHistory:
         :return: The complete history
         :rtype: list
         """
-        return _strip_entry(self.history)
+        out = []
+        for el in self.history:
+            out.append(_strip_entry(el))
+        return out
 
     def save_history_to_json(self, file_name):
         """

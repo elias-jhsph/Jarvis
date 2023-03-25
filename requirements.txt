@@ -5,7 +5,7 @@ openai
 openai-whisper
 py2app
 pygame
-PyAudio
+PyAudio==0.2.12
 tiktoken
 pvporcupine
 SpeechRecognition
@@ -17,5 +17,6 @@ pipdeptree
 spacy
 beautifulsoup4
 keyring
-PyQt5
+PyQt6
 scikit-learn
+dmgbuild

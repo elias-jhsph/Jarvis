@@ -5,10 +5,11 @@ This README provides instructions on how to install, set up, and use a simple vo
 ## Installation
 
 1. Clone or download the repository.
-2. Set up the environment using a virtual environment for python 3.10:
+2. Set up the environment using a virtual environment for python 3.10 (Make sure to use arm arch if m1 including brew):
 ```
 brew install portaudio
 pip install -r requirements.txt
+python -m spacy download en_core_web_sm
 ```
 3. Package the app:
    (Make sure to set PUBLIC to True in setup because the keys are not bundled in this app)

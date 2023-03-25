@@ -1,9 +1,9 @@
 from connections import *
 import sys
-from PyQt5.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, \
-    QFileDialog, QInputDialog, QListWidget, QMessageBox
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, \
+    QFileDialog, QInputDialog, QListWidget, QMessageBox, QListWidgetItem
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 
 
 class SettingsDialog(QDialog):
@@ -16,7 +16,7 @@ class SettingsDialog(QDialog):
 
         # Add a centered title "Settings"
         title = QLabel("Settings")
-        title.setAlignment(Qt.AlignCenter)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
         self.list_widget = QListWidget()
@@ -36,13 +36,15 @@ class SettingsDialog(QDialog):
         ]
 
         for choice in choices:
+            item = QListWidgetItem(choice)
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list_widget.addItem(choice)
 
         layout.addWidget(self.list_widget)
 
         # Add warning label
         self.warning_label = QLabel("Must select 'Stop Listening'\nfor changes to take effect!")
-        self.warning_label.setAlignment(Qt.AlignCenter)
+        self.warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.warning_label.setStyleSheet("QLabel { color: red; font-weight: bold; }")
         self.warning_label.setVisible(False)  # Set visibility to False by default
         layout.addWidget(self.warning_label)
@@ -82,29 +84,48 @@ class SettingsDialog(QDialog):
                 color: #ffffff;
             }
             QListWidget::item:selected {
-                background-color: #000000;
+                background-color: gray;
                 color: #ffffff;
             }
         """)
 
     def handle_click(self, item):
         choice = item.text()
+
+        # Define the function name mapping
+        function_mapping = {
+            'Set User': set_user,
+            'Set Emails': set_emails,
+            'Set Mailjet Key and Secret': set_mj_key_and_secret,
+            'Set OpenAI Key': set_openai_key,
+            'Set Pico Key': set_pico_key,
+            'Set Pico Path': set_pico_path,
+            'Set Google Key': set_google,
+            'Set GCP JSON Path': set_gcp_data
+        }
+
         try:
             if choice in ['Set Pico Key', 'Set OpenAI Key', 'Set Google Key', 'Set Emails', 'Set User']:
-                value, ok = QInputDialog.getText(self, f"Enter your {choice.split(' ')[1]} key:", "")
+                input_dialog = QInputDialog(self)
+                input_dialog.setInputMode(QInputDialog.InputMode.TextInput)
+                input_dialog.setWindowTitle(f"Update {choice.split(' ')[1]}")
+                input_dialog.setLabelText(f"Enter your {choice.split(' ')[1]} key:          ")
+                input_dialog.setMinimumWidth(input_dialog.width() * 4)  # Make it twice as wide
+
+                ok = input_dialog.exec()
+                value = input_dialog.textValue()
+
                 if ok:
-                    globals()[choice.lower().replace(' ', '_').replace('-', '_')](value)
+                    function_mapping[choice](value)
             elif choice == 'Set Pico Path' or choice == 'Set GCP JSON Path':
                 path, _ = QFileDialog.getOpenFileName()
                 if path:
-                    function_name = choice.lower().replace(' ', '_').replace('-', '_')
-                    globals()[function_name](path)
-            elif 'Set Mailjet Key and Secret':
+                    function_mapping[choice](path)
+            elif choice == 'Set Mailjet Key and Secret':
                 value_key, ok_key = QInputDialog.getText(self, "Enter your Mailjet Key:", "")
                 value_secret, ok_secret = QInputDialog.getText(self, "Enter your Mailjet Secret:", "")
                 if ok_key and ok_secret:
-                    function_name = "set_mj_key_and_secret"
-                    globals()[function_name](value_key, value_secret)
+                    function_mapping[choice](value_key, value_secret)
             self.warning_label.setVisible(True)
             self.update_item_colors()
             self.list_widget.clearSelection()
@@ -118,22 +139,22 @@ def main():
 
     # Set up the dark theme
     palette = app.palette()
-    palette.setColor(palette.Window, Qt.black)
-    palette.setColor(palette.WindowText, Qt.white)
-    palette.setColor(palette.Base, Qt.black)
-    palette.setColor(palette.AlternateBase, Qt.black)
-    palette.setColor(palette.ToolTipBase, Qt.black)
-    palette.setColor(palette.ToolTipText, Qt.white)
-    palette.setColor(palette.Text, Qt.white)
-    palette.setColor(palette.Button, Qt.black)
-    palette.setColor(palette.ButtonText, Qt.white)
-    palette.setColor(palette.BrightText, Qt.red)
-    palette.setColor(palette.Highlight, Qt.darkBlue)
-    palette.setColor(palette.HighlightedText, Qt.black)
+    palette.setColor(palette.ColorRole.Window, Qt.GlobalColor.black)
+    palette.setColor(palette.ColorRole.WindowText, Qt.GlobalColor.white)
+    palette.setColor(palette.ColorRole.Base, Qt.GlobalColor.black)
+    palette.setColor(palette.ColorRole.AlternateBase, Qt.GlobalColor.black)
+    palette.setColor(palette.ColorRole.ToolTipBase, Qt.GlobalColor.black)
+    palette.setColor(palette.ColorRole.ToolTipText, Qt.GlobalColor.white)
+    palette.setColor(palette.ColorRole.Text, Qt.GlobalColor.white)
+    palette.setColor(palette.ColorRole.Button, Qt.GlobalColor.black)
+    palette.setColor(palette.ColorRole.ButtonText, Qt.GlobalColor.white)
+    palette.setColor(palette.ColorRole.BrightText, Qt.GlobalColor.red)
+    palette.setColor(palette.ColorRole.Highlight, Qt.GlobalColor.gray)
+    palette.setColor(palette.ColorRole.HighlightedText, Qt.GlobalColor.black)
     app.setPalette(palette)
 
     dialog = SettingsDialog()
-    dialog.exec_()
+    dialog.exec()
 
 
 if __name__ == "__main__":

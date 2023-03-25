@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import platform
 import logging
 from setuptools import setup, find_packages
 
@@ -59,9 +60,9 @@ PACKAGE_NAME_MAPPING = {
     'beautifulsoup4': 'bs4',
     'google-api-python-client': 'googleapiclient',
     'jaraco.classes': 'SKIP',
-    'pyqt5': 'PyQt5',
-    'pyqt5-qt5': 'SKIP',
-    'pyqt5-sip': 'SKIP'
+    'pyqt6': 'PyQt6',
+    'pyqt6-qt6': 'SKIP',
+    'pyqt6-sip': 'SKIP'
 }
 ADDED_PACKAGES = ['en_core_web_sm']
 
@@ -130,6 +131,11 @@ def find_packages_improved():
     return output
 
 
+sound_c_path = 'venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_x86_64.dylib'
+if platform.machine() == "arm64":
+    sound_c_path = 'venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_arm64.dylib'
+
+
 APP = ['jarvis.py']
 
 DATA_FILES = [
@@ -144,7 +150,7 @@ DATA_FILES = [
                      'audio_files/tone_one.wav', 'audio_files/tone_two.wav', 'audio_files/yes.wav',
                      "audio_files/searching.wav", 'audio_files/connection_error.wav'
                      ]),
-    ('../Frameworks', ['venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_x86_64.dylib'])
+    ('../Frameworks', [sound_c_path])
     ]
 
 if PUBLIC:
