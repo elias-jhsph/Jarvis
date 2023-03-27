@@ -96,10 +96,8 @@ class JarvisApp:
 
     def quit_listener(self, sender):
         """Quits the application."""
-        logger.info("Quitting application")
+        logger.info("Trying to quit application")
         self._safe_kill()
-        if self.settings.running():
-            self.settings.cancel()
         rumps.quit_application()
 
     def run(self):
