@@ -49,7 +49,14 @@ def _strip_entry(entry):
     :return: A new dictionary containing only the 'role' and 'content' fields from the original entry.
     :rtype: dict
     """
-    return {'role': entry['role'], 'content': entry['content']}
+
+    if isinstance(entry, list):
+        new = []
+        for el in entry:
+            new.append(_strip_entry(el))
+        return new
+    else:
+        return {'role': entry['role'], 'content': entry['content']}
 
 
 def get_similarity_score(query_vector, entry_vector):
@@ -160,7 +167,11 @@ class AssistantHistory:
         """
         total = 0
         for el in ls:
-            total += self.count_tokens_text(el['content'])
+            if isinstance(el, list):
+                for e in el:
+                    total += self.count_tokens_text(e['content'])
+            else:
+                total += self.count_tokens_text(el['content'])
         return total
 
     def add_user_query(self, query, role="user"):
@@ -339,8 +350,15 @@ class AssistantHistory:
 
         if only_role_and_content:
             combined_context = [_strip_entry(entry) for entry in combined_context]
+        output_context = []
+        for item in combined_context:
+            if isinstance(item, list):
+                for element in item:
+                    output_context.append(element)
+            else:
+                output_context.append(item)
 
-        return [self.get_system()] + combined_context
+        return [self.get_system()] + output_context
 
     def get_history(self):
         """

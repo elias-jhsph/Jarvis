@@ -151,7 +151,9 @@ def jarvis_process():
                                     sound.play()
                             text = processor(query)
                         except TypeError as e:
-                            logger.error(e)
+                            logger.error(e, exc_info=True)
+                            with open("connection_error.log", "w") as file:
+                                file.write(str(e))
                             text = "I am so sorry, my circuits are all flustered, ask me again please."
                         logger.info("Text: %s", text)
 
