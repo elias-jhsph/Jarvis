@@ -4,7 +4,6 @@ rumps
 openai
 openai-whisper
 py2app
-pygame
 PyAudio==0.2.12
 tiktoken
 pvporcupine

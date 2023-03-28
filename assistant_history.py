@@ -19,8 +19,8 @@ user = get_user()
 user_fix = user + "'" if user[-1] == "s" else user + "'s"
 model = "gpt-3.5-turbo-0301"
 temperature = 0.8
-maximum_length_message = 500
-maximum_length_history = 2700
+maximum_length_message = 1300
+maximum_length_history = 7700
 top_p = 1
 frequency_penalty = 0.19
 presence_penalty = 0
@@ -266,7 +266,7 @@ class AssistantHistory:
                 new_keywords[keyword].append([query_entry, response_entry])
         self.keywords = new_keywords
 
-    def gather_context(self, query, minimum_recent_history_length=2, max_tokens=2500,
+    def gather_context(self, query, minimum_recent_history_length=2, max_tokens=6500,
                        only_summaries=False, only_role_and_content=True):
         """
         Gathers relevant context for a given query from the chat assistant's history.

@@ -1,15 +1,12 @@
-if __name__ == "__main__":
-    import sys
-    import subprocess_access
-    subprocess_access.setter(sys.argv[1])
 import ctypes.util
 import functools
 import os
 import pvporcupine
-import pygame
 import struct
 import time
 import datetime
+import threading
+import wave
 
 from connections import ConnectionKeyError
 
@@ -76,17 +73,79 @@ def get_next_audio_frame(handle, audio_stream):
     return pcm
 
 
-def wait(sound):
+def play_audio_file(file_path, player, blocking=True, loops=1, delay=0):
     """
-    Wait for the sound to finish playing.
+    Play an audio file using pyaudio.
 
-    :param sound: The pygame.mixer.music instance
+    :param file_path: str, path to the audio file
+    :param player: pyaudio.PyAudio instance
+    :param blocking: bool, whether the audio playback should block the main thread (default: True)
+    :param loops: int, the number of times to loop the audio file (default: 1)
+    :param delay: float, the delay in seconds before starting playback (default: 0)
+    :return: threading.Event, an event to signal stopping the playback (only for non-blocking mode)
     """
-    while sound.get_busy():
-        pygame.time.wait(100)
+    stop_event = threading.Event()
+
+    if blocking:
+        time.sleep(delay)
+        _play_audio_file_blocking(file_path, player, stop_event, loops, 0)
+    else:
+        playback_thread = threading.Thread(target=_play_audio_file_blocking,
+                                           args=(file_path, player, stop_event, loops, delay))
+        playback_thread.start()
+
+    return stop_event
 
 
-def jarvis_process():
+def _play_audio_file_blocking(file_path, player, stop_event, loops, delay):
+    """
+    Play an audio file using pyaudio, blocking the calling thread until playback is complete or stopped.
+
+    :param file_path: str, path to the audio file
+    :param player: pyaudio.PyAudio instance
+    :param stop_event: threading.Event, an event to signal stopping the playback
+    :param loops: int, the number of times to loop the audio file
+    :param delay: float, the delay in seconds before starting playback
+    """
+
+    chunk = 1024
+    if not stop_event.is_set():
+        time.sleep(delay)
+        for loop in range(loops):
+            with wave.open(file_path, 'rb') as wf:
+                stream = player.open(format=player.get_format_from_width(wf.getsampwidth()),
+                                     channels=wf.getnchannels(),
+                                     rate=wf.getframerate(),
+                                     output=True)
+
+                data = wf.readframes(chunk)
+                while data:
+                    if not stop_event.is_set():
+                        stream.write(data)
+                        data = wf.readframes(chunk)
+                    else:
+                        fade_out_duration = 1  # seconds
+                        fade_out_steps = int(wf.getframerate() / chunk * fade_out_duration)
+                        fade_out_step_size = 1 / fade_out_steps
+                        sample_width = wf.getsampwidth()
+
+                        for step in range(fade_out_steps):
+                            factor = 1 - step * fade_out_step_size
+                            num_samples = len(data) // sample_width
+                            unpack_format = f"{num_samples}h"
+                            samples = struct.unpack(unpack_format, data)
+                            faded_samples = [int(sample * factor) for sample in samples]
+                            faded_data = struct.pack(unpack_format, *faded_samples)
+                            stream.write(faded_data)
+                            data = wf.readframes(chunk)
+
+                        break
+
+                stream.stop_stream()
+                stream.close()
+
+
+def jarvis_process(stop_event, queue):
     """
     Main function to run the Jarvis voice assistant process.
     """
@@ -103,11 +162,7 @@ def jarvis_process():
 
         pa = pyaudio.PyAudio()
 
-        pygame.mixer.init(channels=1, buffer=8196)
-        sound = pygame.mixer.music
-        sound.load("audio_files/tone_one.wav")
-        sound.play()
-        wait(sound)
+        play_audio_file("audio_files/tone_one.wav", pa, blocking=False, delay=2)
 
         prep_mic()
 
@@ -115,86 +170,79 @@ def jarvis_process():
                                frames_per_buffer=handle.frame_length, input_device_index=None)
 
         try:
-            while True:
+            queue.put("standby")
+            while stop_event.is_set() is False:
                 keyword_index = handle.process(get_next_audio_frame(handle, audio_stream))
                 if keyword_index >= 0:
                     audio_stream.stop_stream()
                     try:
                         logger.info("listening...")
+                        queue.put("listening")
                         query_audio = listen_to_user()
+                        queue.put("processing")
                         logger.info("adjusting mic for next time...")
                         prep_mic()
                         gap = datetime.datetime.now() - last_time
                         last_time = datetime.datetime.now()
                         if gap.seconds > 60 * 5:
-                            sound.load("audio_files/hmm.wav")
-                            sound.play()
-                            wait(sound)
-                        sound.load('audio_files/beeps.wav')
-                        sound.play(loops=7)
+                            play_audio_file("audio_files/hmm.wav", pa)
+                        stop_event = play_audio_file("audio_files/beeps.wav", pa, loops=7, blocking=False)
                         try:
                             logger.info("Recognizing...")
                             query = convert_to_text(query_audio)
                             logger.info("Query: %s", query)
                             logger.info("Processing...")
-                            audio_info = processor(query, return_audio_file=True)
+                            audio_info, streamed = processor(query, return_audio_file=True)
                             if audio_info:
+                                stop_event.set()
                                 logger.info("Playing temporary audio...")
                                 if isinstance(audio_info, list):
-                                    sound.load(audio_info[0])
-                                    sound.play()
-                                    wait(sound)
-                                    sound.load(audio_info[1])
-                                    sound.play(loops=7)
+                                    play_audio_file(audio_info[0], pa)
+                                    stop_event = play_audio_file(audio_info[1], pa, loops=7, blocking=False)
                                 else:
-                                    sound.load(audio_info)
-                                    sound.play()
-                            text = processor(query)
+                                    stop_event = play_audio_file(audio_info, pa, blocking=False)
+                                text, streamed = processor(query, stop_audio_event=stop_event)
+                            if streamed and not audio_info:
+                                stop_event.set()
+                                text, streamed = processor(query)
+                            else:
+                                text, streamed = processor(query)
+                            print("MADE IT")
                         except TypeError as e:
-                            logger.error(e)
+                            logger.error(e, exc_info=True)
+                            with open("processor_error.log", "w") as file:
+                                file.write(str(e))
                             text = "I am so sorry, my circuits are all flustered, ask me again please."
                         logger.info("Text: %s", text)
-
-                        logger.info("Making audio response")
-                        audio_path = text_to_speech(text)
-                        sound.fadeout(500)
-                        sound.load(audio_path)
-                        sound.play()
-                        wait(sound)
-                        os.remove(audio_path)
-                        time.sleep(0.1)
+                        if not streamed:
+                            logger.info("Making audio response")
+                            audio_path = text_to_speech(text)
+                            stop_event.set()
+                            play_audio_file(audio_path, pa)
+                            os.remove(audio_path)
+                            time.sleep(0.1)
+                        queue.put("standby")
                     except Exception as e:
                         logger.error(e, exc_info=True)
                         with open("inner_error.log", "w") as file:
                             file.write(str(e))
                         audio_stream.stop_stream()
-                        pygame.mixer.init(channels=1, buffer=8196)
-                        sound = pygame.mixer.music
-                        sound.load('audio_files/minor_error.wav')
-                        sound.play()
-                        wait(sound)
+                        play_audio_file('audio_files/minor_error.wav', pa)
 
                     audio_stream = pa.open(rate=handle.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
                                            frames_per_buffer=handle.frame_length, input_device_index=None)
+            audio_stream.stop_stream()
         except Exception as e:
             logger.error(e, exc_info=True)
             with open("outer_error.log", "w") as file:
                 file.write(str(e))
             audio_stream.stop_stream()
-            pygame.mixer.init(channels=1, buffer=8196)
-            sound = pygame.mixer.music
-            sound.load('audio_files/major_error.wav')
-            sound.play()
-            wait(sound)
+            play_audio_file('audio_files/major_error.wav', pa)
     except ConnectionKeyError as e:
         logger.error(e, exc_info=True)
         if audio_stream:
             audio_stream.stop_stream()
-        pygame.mixer.init(channels=1, buffer=8196)
-        sound = pygame.mixer.music
-        sound.load('audio_files/connection_error.wav')
-        sound.play(-1)
-        wait(sound)
+        play_audio_file('audio_files/connection_error.wav', pa)
 
 
 def test_mic():

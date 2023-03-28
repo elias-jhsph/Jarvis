@@ -2,6 +2,7 @@ from google.api_core.exceptions import InvalidArgument
 from google.cloud import texttospeech
 from google.oauth2 import service_account
 from connections import get_gcp_data
+import uuid
 import re
 
 # Setup logging
@@ -15,7 +16,7 @@ sa_creds = service_account.Credentials.from_service_account_info(get_gcp_data())
 client = texttospeech.TextToSpeechClient(credentials=sa_creds)
 
 
-def text_to_speech(text: str) -> str:
+def text_to_speech(text: str, stream=False):
     text = re.sub("`", "", text)
     """
     Convert the given text to speech and save the result as an audio file.
@@ -54,9 +55,11 @@ def text_to_speech(text: str) -> str:
         else:
             raise Exception("Can not shrink long sentence enough to turn to text")
 
+    if stream:
+        return response.audio_content
 
     # Save the binary audio content to a file
-    output_file = "output.wav"
+    output_file = str(uuid.uuid4())+".wav"
     with open(output_file, "wb") as out:
         out.write(response.audio_content)
         logger.info(f'Audio content written to file "{output_file}"')

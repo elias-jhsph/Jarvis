@@ -7,9 +7,9 @@ import tiktoken
 
 # Set up OpenAI API
 openai.api_key = get_openai_key()
-base_model = "text-davinci-002"
-medium_model = "text-davinci-003"
-enc = tiktoken.encoding_for_model(medium_model)
+base_model = "text-davinci-003"
+medium_model = "gpt-4"
+enc = tiktoken.encoding_for_model(base_model)
 
 # Set up Google API
 service = build("customsearch", "v1", developerKey=get_google())
@@ -24,7 +24,8 @@ def refine_query(query):
         engine=medium_model,
         prompt=f"Please help me improve this search query for better results: '{query}'. Add context and keywords you "
                "think help better capture the idea behind the query. The response you send "
-               "will go directly into google. Here is a helpful reminder of google tools you can use.\n"
+               "will go directly into google. Here is a helpful reminder of google tools you can use "
+               "(Don't use them if don't think you need them).\n"
                'Quotes (""): Use quotes to search for an exact phrase or word order.\n'
                "Minus (-): Exclude a specific word from your search.\n"
                "Asterisk (*): Use as a placeholder for unknown words.\n"

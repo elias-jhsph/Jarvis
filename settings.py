@@ -108,7 +108,7 @@ icon_locations = {appname: (140, 120), "Applications": (500, 120)}
 
 # Other color components may be expressed either in the range 0 to 1, or
 # as percentages (e.g. 60% is equivalent to 0.6).
-background = "background.png"
+background = "icons/background.png"
 
 show_status_bar = False
 show_tab_view = False

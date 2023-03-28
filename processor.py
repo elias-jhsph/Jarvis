@@ -4,7 +4,8 @@ import html
 import logging
 from mailjet_rest import Client
 from connections import get_mj_key, get_mj_secret, get_emails
-from gpt_interface import generate_response, get_last_response
+from gpt_interface import generate_response, get_last_response, stream_response, resolve_stream_response
+from streaming_response_audio import stream_audio_response
 from internet_helper import create_internet_context
 from text_speech import text_to_speech
 
@@ -46,12 +47,13 @@ def remove_code_blocks(text):
                   re.sub("```[^```]+```", "(FYI I had some code here that I am not reading to save time)", text))
 
 
-def processor(raw_query, return_audio_file=False):
+def processor(raw_query, return_audio_file=False, stop_audio_event=None):
     """
     Process the raw query and determine the appropriate action.
 
     :param return_audio_file: bool, whether to see if there is some temp audio to play
     :param raw_query: str, the raw query string
+    :param stop_audio_event: threading.Event, event to stop audio streaming
     :return: str, the result of processing the query
     """
     # Handle email-related queries
@@ -62,7 +64,7 @@ def processor(raw_query, return_audio_file=False):
             and raw_query[:50].lower().find("email") >= 0:
         query, result = get_last_response()
         if return_audio_file:
-            return None
+            return None, False
         return email_processor("Jarvis responding to question: "+query, result)
 
     email_internet_search_texts = ["email me the following internet search",
@@ -83,17 +85,17 @@ def processor(raw_query, return_audio_file=False):
         raw_query = raw_query[raw_query[:50].lower().find(test) + len(test):]
         query = re.sub("^[^a-z|A-Z]+", "", raw_query)
         if return_audio_file:
-            return text_to_speech('Searching the internet for your query, "'+query+'". This may take some time.')
+            return text_to_speech('Searching the internet for your query, "'+query+'". This may take some time.'), False
         response, data = internet_processor(query)
         return email_processor("Jarvis searched for: " + query, response + "\n\n```" +
-                               json.dumps(data,indent=5) + "```")
+                               json.dumps(data,indent=5) + "```"), False
 
     # Handle reminder-related queries
     if raw_query[:50].lower().find("following reminder") >= 0:
         reminder = clean_up_reminder(raw_query)
         if return_audio_file:
-            return text_to_speech("Emailing you the following reminder: "+reminder)
-        return email_processor("Jarvis reminder: " + reminder, reminder)
+            return text_to_speech("Emailing you the following reminder: "+reminder), False
+        return email_processor("Jarvis reminder: " + reminder, reminder), False
 
     # Handle other queries
     if raw_query[:50].lower().find("the following") >= 0:
@@ -102,8 +104,8 @@ def processor(raw_query, return_audio_file=False):
                 raw_query[:50].lower().find("email the following") >= 0:
             query = clean_up_query(raw_query)
             if return_audio_file:
-                return text_to_speech("Emailing you the answer to: "+query)
-            return email_processor("Jarvis responding to question: "+query, generate_response(query))
+                return text_to_speech("Emailing you the answer to: "+query), False
+            return email_processor("Jarvis responding to question: "+query, generate_response(query)), False
 
         # Internet search-related queries
         if raw_query[:50].lower().find("internet search me the following") >= 0 or \
@@ -114,8 +116,8 @@ def processor(raw_query, return_audio_file=False):
             query = clean_up_query(raw_query)
             if return_audio_file:
                 return [text_to_speech('Searching the internet for your query, "'+query+'". This may take some time.'),
-                        "audio_files/searching.wav"]
-            response, data = internet_processor(query)
+                        "audio_files/searching.wav"], True
+            response, data = internet_processor(query, stop_audio_event=stop_audio_event), True
             return response
         if return_audio_file:
             return None
@@ -126,13 +128,14 @@ def processor(raw_query, return_audio_file=False):
         query = re.sub("^[^a-z|A-Z]+", "", raw_query)
         if return_audio_file:
             return [text_to_speech('Searching the internet for your query, "'+query+'". This may take some time.'),
-                    "audio_files/searching.wav"]
-        response, data = internet_processor(query)
-        return response
+                    "audio_files/searching.wav"], True
+        response, data = internet_processor(query, stop_audio_event=stop_audio_event), True
+        return response, True
     else:
         if return_audio_file:
-            return None
-        return remove_code_blocks(generate_response(raw_query))
+            return None, True
+        return resolve_stream_response(*stream_audio_response(stream_response(raw_query),
+                                       stop_audio_event=stop_audio_event)), True
 
 
 def convert_to_pretty_html(text):
@@ -295,13 +298,15 @@ def test_email(email):
     return "Sent!"
 
 
-def internet_processor(raw_query):
+def internet_processor(raw_query, stop_audio_event=None):
     """
     Process an internet search query.
 
     :param raw_query: str, the raw query string
+    :param stop_audio_event: threading.Event, the event to set when the audio should stop playing
     :return: str, the result of processing the internet search query
     """
     context, data = create_internet_context(raw_query, result_number=5)
-    return generate_response(context, query_history_role="assistant"), data
+    return resolve_stream_response(*stream_audio_response(stream_response(context, query_history_role="assistant"),
+                                                          stop_audio_event=stop_audio_event)), data
 

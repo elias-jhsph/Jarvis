@@ -11,7 +11,7 @@ logger = logger_config.get_logger()
 
 # Constants
 history_changed = False
-model = "gpt-3.5-turbo-0301"
+model = "gpt-4"
 temperature = 0.8
 maximum_length_message = 500
 maximum_length_history = 2800
@@ -21,7 +21,7 @@ presence_penalty = 0
 history_path = "history.json"
 
 openai.api_key = get_openai_key()
-enc = tiktoken.encoding_for_model(model)
+enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
 assert enc.decode(enc.encode("hello world")) == "hello world"
 
 # Setup background task system
@@ -99,6 +99,59 @@ def generate_response(query, query_history_role="user", query_role="user"):
         history_access.add_assistant_response(output)
     schedule_refresh_assistant()
     return output
+
+
+def stream_response(query, query_history_role="user", query_role="user"):
+    """
+    stream a response to the given query.
+
+    :param query: The user's input query.
+    :type query: str
+    :param query_role: defaults to "user" but can be "assistant" or "system"
+    :type query_role: str
+    :param query_history_role: defaults to "user" but can be "assistant" or "system"
+    :type query_history_role: str
+    :return: The AI Assistant's response.
+    :rtype: str
+    """
+    safe_wait()
+    history_access.add_user_query(query, role=query_history_role)
+    return openai.ChatCompletion.create(
+        model=model,
+        messages=history_access.gather_context(query)+[{"role": query_role, "content": query}],
+        temperature=temperature,
+        max_tokens=maximum_length_message,
+        top_p=top_p,
+        frequency_penalty=frequency_penalty,
+        presence_penalty=presence_penalty,
+        stream=True
+    )
+
+
+def resolve_stream_response(output, reason):
+    """
+    stream a response to the given query.
+
+    :param output: The response to the user's input query.
+    :type output: str
+    :param reason: The reason the response was ended.
+    :type reason: str
+    """
+    if reason != "stop":
+        if reason == "length":
+            history_access.add_assistant_response(output)
+            return output
+        if reason == "null":
+            history_access.reset_add()
+            return output
+        if reason == "content_filter":
+            history_access.add_assistant_response(output)
+            return output
+    else:
+        history_access.add_assistant_response(output)
+    schedule_refresh_assistant()
+    return output
+
 
 
 def schedule_refresh_assistant():
