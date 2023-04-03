@@ -1,36 +1,130 @@
 import tiktoken
 import openai
 import atexit
+import time
 from concurrent.futures import ThreadPoolExecutor
-from connections import get_openai_key
+from connections import get_openai_key, ConnectionKeyError
 from assistant_history import AssistantHistory
+import re
+
 
 # Set up logging
 import logger_config
 logger = logger_config.get_logger()
 
-# Constants
-history_changed = False
-model = "gpt-4"
-temperature = 0.8
-maximum_length_message = 500
-maximum_length_history = 2800
-top_p = 1
-frequency_penalty = 0.19
-presence_penalty = 0
-history_path = "history.json"
+# Configuration
+models = {"primary": {"name": "gpt-4",
+                      "max_message": 800,
+                      "max_history": 6600,
+                      "temperature": 0.8,
+                      "top_p": 1,
+                      "frequency_penalty": 0.19,
+                      "presence_penalty": 0},
+          "limit": 2,
+          "time": 60*60,
+          "requests": [],
+          "fall_back": {"name": "gpt-3.5-turbo-0301",
+                        "max_message": 800,
+                        "max_history": 2800,
+                        "temperature": 0.8,
+                        "top_p": 1,
+                        "frequency_penalty": 0.19,
+                        "presence_penalty": 0}
+          }
 
-openai.api_key = get_openai_key()
-enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+# Global variables
+history_changed = False
+history_path = "history.json"
+try:
+    openai.api_key = get_openai_key()
+except ConnectionKeyError:
+    logger.warning("OpenAI key not found!")
+enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0301")
 assert enc.decode(enc.encode("hello world")) == "hello world"
 
 # Setup background task system
 executor = ThreadPoolExecutor(max_workers=1)
 tasks = []
 
+
+def summarizer(input_list):
+    """
+    Summarize a conversation by sending a query to the OpenAI API.
+
+    :param input_list: A list of dictionaries containing the conversation to be summarized.
+    :type input_list: list
+    :return: A dictionary containing the role and content of the summarized conversation.
+    :rtype: dict
+    """
+    global models
+    query = [{"role": "user", "content": "Please summarize this conversation concisely (Do your best to respond only"
+                                         " with your best attempt at a summary and leave out caveats, preambles, "
+                                         "or next steps)"}]
+    response = openai.ChatCompletion.create(
+        model=models["fall_back"]['name'],
+        messages=input_list+query,
+        temperature=models["fall_back"]["temperature"],
+        max_tokens=models["fall_back"]["max_message"],
+        top_p=models["fall_back"]["top_p"],
+        frequency_penalty=models["fall_back"]["frequency_penalty"],
+        presence_penalty=models["fall_back"]["presence_penalty"]
+    )
+    output = response['choices'][0]['message']['content']
+    pattern = r'^On\s([A-Z][a-z]+,\s[A-Z][a-z]+\s\d{1,2},\s\d{4}\s(?:at\s)?\d{1,2}:\d{2}\s(?:AM|PM)?:)\s'
+    match = re.search(pattern, input_list[-1]['content'])
+    if match:
+        conversation_date = match.group(1)
+        conversation_date = conversation_date.rstrip(':') + '.'
+        if output[-1] != '.' or output[-1] != '?':
+            output += '.'
+        output += f" This conversation took place on {conversation_date}"
+    return {"role": "system", "content": output}
+
+
+def tokenizer(text):
+    """
+    Tokenize a string of text.
+
+    :param text: The string of text to tokenize.
+    :type text: str
+    :return: A list of tokens.
+    :rtype: list
+    """
+    global enc
+    return enc.encode(text)
+
+
 # Load Assistant History
-history_access = AssistantHistory()
+history_access = AssistantHistory(tokenizer, summarizer, models["primary"]["max_history"])
 history_access.load_history_from_json(history_path)
+
+
+def get_model(error=False):
+    """
+    Returns the model to use for the next query.
+    """
+    global models
+    global history_access
+    if len(models["requests"]) >= models["limit"] or error:
+        history_access.max_tokens = models["fall_back"]["max_history"]
+        if models["requests"][0] + models["time"] < time.time():
+            models["requests"].pop(0)
+        return models["fall_back"]
+    else:
+        history_access.max_tokens = models["primary"]["max_history"]
+        return models["primary"]
+
+
+def log_model(model):
+    """
+    Logs the model used for the last query.
+
+    :param model: The model used for the last query.
+    """
+    global models
+    if model == models["primary"]["name"]:
+        models["requests"].append(time.time())
+    logger.info(f"Model: {model}")
 
 
 def refresh_assistant():
@@ -74,17 +168,33 @@ def generate_response(query, query_history_role="user", query_role="user"):
     """
     safe_wait()
     history_access.add_user_query(query, role=query_history_role)
-    response = openai.ChatCompletion.create(
-        model=model,
-        messages=history_access.gather_context(query)+[{"role": query_role, "content": query}],
-        temperature=temperature,
-        max_tokens=maximum_length_message,
-        top_p=top_p,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty
-    )
+    model = get_model()
+    try:
+        response = openai.ChatCompletion.create(
+            model=model["name"],
+            messages=history_access.gather_context(query)+[{"role": query_role, "content": query}],
+            temperature=model["temperature"],
+            max_tokens=model["max_message"],
+            top_p=model["top_p"],
+            frequency_penalty=model["frequency_penalty"],
+            presence_penalty=model["presence_penalty"]
+        )
+    except openai.error.RateLimitError:
+        log_model(model["name"])
+        model = get_model(error=True)
+        response = openai.ChatCompletion.create(
+            model=model["name"],
+            messages=history_access.gather_context(query) + [{"role": query_role, "content": query}],
+            temperature=model["temperature"],
+            max_tokens=model["max_message"],
+            top_p=model["top_p"],
+            frequency_penalty=model["frequency_penalty"],
+            presence_penalty=model["presence_penalty"]
+        )
+
     output = response['choices'][0]['message']['content']
     reason = response['choices'][0]["finish_reason"]
+    log_model(model["name"])
     if reason != "stop":
         if reason == "length":
             history_access.add_assistant_response(output)
@@ -116,16 +226,32 @@ def stream_response(query, query_history_role="user", query_role="user"):
     """
     safe_wait()
     history_access.add_user_query(query, role=query_history_role)
-    return openai.ChatCompletion.create(
-        model=model,
-        messages=history_access.gather_context(query)+[{"role": query_role, "content": query}],
-        temperature=temperature,
-        max_tokens=maximum_length_message,
-        top_p=top_p,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty,
-        stream=True
-    )
+    model = get_model()
+    log_model(model["name"])
+    try:
+        return openai.ChatCompletion.create(
+            model=model["name"],
+            messages=history_access.gather_context(query)+[{"role": query_role, "content": query}],
+            temperature=model["temperature"],
+            max_tokens=model["max_message"],
+            top_p=model["top_p"],
+            frequency_penalty=model["frequency_penalty"],
+            presence_penalty=model["presence_penalty"],
+            stream=True,
+        )
+    except openai.error.RateLimitError:
+        model = get_model(error=True)
+        log_model(model["name"])
+        return openai.ChatCompletion.create(
+            model=model["name"],
+            messages=history_access.gather_context(query) + [{"role": query_role, "content": query}],
+            temperature=model["temperature"],
+            max_tokens=model["max_message"],
+            top_p=model["top_p"],
+            frequency_penalty=model["frequency_penalty"],
+            presence_penalty=model["presence_penalty"],
+            stream=True,
+        )
 
 
 def resolve_stream_response(output, reason):
@@ -151,7 +277,6 @@ def resolve_stream_response(output, reason):
         history_access.add_assistant_response(output)
     schedule_refresh_assistant()
     return output
-
 
 
 def schedule_refresh_assistant():

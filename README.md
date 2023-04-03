@@ -8,6 +8,7 @@ This README provides instructions on how to install, set up, and use a simple vo
 2. Set up the environment using a virtual environment for python 3.10 (Make sure to use arm arch if m1 including brew):
 ```
 brew install portaudio
+brew install ffmpeg
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
@@ -49,14 +50,28 @@ In addition to these specific voice commands, you can also speak more generally,
 
 The app includes a settings menu that can be accessed by clicking on the "Settings" menu item. The settings menu allows you to add the following settings and access keys:
 
-- User: Set the user's name.
-- Emails: Set the email addresses that the app can send emails to.
-- Mailjet Key and Secret: Set the Mailjet API key and secret for sending emails (If you want to send emails).
-- OpenAI Key: Set the OpenAI API key for natural language processing.
-- Pico Key: Set the Pico API key for wake word detection conversion.
-- Pico Path: Set the file path for the Pico wake word detection engine.
-- Google Key: Set the Google API key for internet search queries.
-- GCP JSON Path: Set the file path for the Google Cloud Platform JSON key file (GCP Must have access to text to speech API).
+- User: Set the user's name
+- Emails: Set the email addresses that the app can send emails to
+- OpenAI Key: Set the OpenAI API key for natural language processing
+- Mailjet Key and Secret: Set the Mailjet API key and secret for sending emails
+    - This is not required to use the app, but is required to send emails
+    - If you don't have a Mailjet account, you can create one at https://www.mailjet.com/
+    - If you don't add it, when you request an email the app will open your default email client instead
+- Pico Key: Set the Pico API key for wake word detection conversion
+    - If you don't have a Pico account, you can create one at https://picovoice.ai/
+    - If you don't add it, the app will use pocketsphinx for wake word detection which may be a little worse
+- Pico Path: Set the file path for the Pico wake word detection engine .ppn file
+    - This .ppn file needs to match your pico key to work 
+- Google Key: Set the Google API key for internet search queries
+    - Technically you are not supposed to use google search without using the API
+    - If you don't add this, the googlesearch-python will be used instead
+    - To get a google api key, go to https://console.cloud.google.com/apis/credentials
+- Google CX: Set the Google API CX for internet search queries
+    - This should be the custom search engine that you have access to via the google api
+- GCP JSON Path: Set the file path for the Google Cloud Platform JSON key file
+    - Google text to speach sounds great but if you don't want to set this up gtts will be used instead
+    - GCP Must have access to text to speech API
+    - To try googles text to speech, go to https://cloud.google.com/text-to-speech.
 
 ## Acknowledgements
 
@@ -68,3 +83,6 @@ The following links were helpful in creating this app:
 - OpenAI Speech-to-Text https://platform.openai.com/docs/guides/speech-to-text/prompting
 - Creating a macOS Menu Bar App https://camillovisini.com/article/create-macos-menu-bar-app-pomodoro/
 - Python Sounddevice Issues https://github.com/spatialaudio/python-sounddevice/issues/130
+
+## License
+GNU Affero General Public License v3.0

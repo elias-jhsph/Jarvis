@@ -45,7 +45,7 @@ def get_connection_ring():
             if connection_data is not None:
                 connections_ring = json.loads(base64.b64decode(connection_data).decode())
             else:
-                connections_ring = {}
+                connections_ring = {"user":"User"}
 
 
 get_connection_ring()
@@ -138,6 +138,13 @@ def get_google():
     google_key = get_connection('google')
     if google_key is None:
         raise ConnectionKeyError('google')
+    return google_key
+
+
+def get_google_cx():
+    google_key = get_connection('google_cx')
+    if google_key is None:
+        raise ConnectionKeyError('google_cx')
     return google_key
 
 
@@ -240,19 +247,26 @@ def set_gcp_data(gcp_data_path, data=False):
     set_connection('gcp', gcp_data)
 
 
-def set_google(google_key):
+def set_google_key_and_ck(google_key, google_cx):
+    try:
+        from googleapiclient.discovery import build
+        service = build("customsearch", "v1", developerKey=google_key)
+        res = service.cse().list(q='test', cx=google_cx).execute()
+    except Exception as e:
+        raise ConnectionKeyInvalid('Google')
     set_connection('google', google_key)
+    set_connection('google_cx', google_cx)
 
 
 def find_setters_that_throw_errors():
     getters = [
         'get_pico_key', 'get_openai_key', 'get_pico_path', 'get_mj_key', 'get_mj_secret',
-        'get_emails', 'get_user', 'get_gcp_data', 'get_google'
+        'get_emails', 'get_user', 'get_gcp_data', 'get_google', 'get_google_cx'
     ]
 
     setters = [
         'set_pico_key', 'set_openai_key', 'set_pico_path', 'set_mj_key_and_secret', 'set_emails',
-        'set_user', 'set_gcp_data', 'set_google'
+        'set_user', 'set_gcp_data', 'set_google_key_and_ck'
     ]
 
     error_setters = []
@@ -272,10 +286,16 @@ def find_setters_that_throw_errors():
             except Exception as e:
                 error_setters.append(setter)
         else:
-            try:
-                set_mj_key_and_secret(get_mj_key(), get_mj_secret())
-            except Exception as e:
-                error_setters.append(setter)
+            if setter == "set_mj_key_and_secret":
+                try:
+                    set_mj_key_and_secret(get_mj_key(), get_mj_secret())
+                except Exception as e:
+                    error_setters.append(setter)
+            else:
+                try:
+                    set_google_key_and_ck(get_google(), get_google_cx())
+                except Exception as e:
+                    error_setters.append(setter)
 
     return error_setters
 

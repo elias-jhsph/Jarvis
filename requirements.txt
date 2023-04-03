@@ -1,6 +1,5 @@
 mailjet_rest
 numpy
-rumps
 openai
 openai-whisper
 py2app
@@ -19,3 +18,7 @@ keyring
 PyQt6
 scikit-learn
 dmgbuild
+gtts
+pydub
+googlesearch-python
+pocketsphinx

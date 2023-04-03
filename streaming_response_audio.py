@@ -4,9 +4,11 @@ import io
 import queue
 import threading
 import numpy as np
-from text_speech import text_to_speech
+from text_speech import text_to_speech, TextToSpeechError
 import pyaudio
 import wave
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="spacy.pipeline.lemmatizer", lineno=211)
 
 nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
 nlp.add_pipe("sentencizer")
@@ -43,7 +45,8 @@ class SpeechStreamer:
                     self.stream = self.py_audio.open(format=pyaudio.paInt16,
                                                      channels=CHANNELS,
                                                      rate=sample_rate,
-                                                     output=True)
+                                                     output=True,
+                                                     frames_per_buffer=CHUNK)
             chunk_played = False
             for chunk in generator:
                 self.stream.write(chunk)
@@ -54,18 +57,18 @@ class SpeechStreamer:
             if chunk_played:
                 with self.lock:
                     self.audio_count -= 1
-                    print(f"Audio count: {self.audio_count}")
+                    #print(f"Audio count: {self.audio_count}")
                     if self.audio_count == 0 and self.done:
                         self.stop_event.set()
-                        print("Set stop_event")
+                        #print("Set stop_event")
             else:
                 print("No chunks played")
 
-    def queue_text(self, text, delay=0):
+    def queue_text(self, text, delay=0, model="gpt-4"):
         with self.lock:
             self.audio_count += 1
-        print(f"Queued text: {text}, audio count: {self.audio_count}")
-        tts_thread = threading.Thread(target=self._process_text_to_speech, args=(text, delay,))
+        #print(f"Queued text: {text}, audio count: {self.audio_count}")
+        tts_thread = threading.Thread(target=self._process_text_to_speech, args=(text, delay, model,))
         tts_thread.daemon = True
         tts_thread.start()
 
@@ -77,8 +80,11 @@ class SpeechStreamer:
             self.stream.close()
         self.py_audio.terminate()
 
-    def _process_text_to_speech(self, text, delay):
-        byte_data = text_to_speech(text, stream=True)
+    def _process_text_to_speech(self, text, delay, model):
+        try:
+            byte_data = text_to_speech(text, stream=True, model=model)
+        except TextToSpeechError as e:
+            return
         time.sleep(delay)
         wav_io = io.BytesIO(byte_data)
         with wave.open(wav_io, 'rb') as wav_file:
@@ -88,7 +94,7 @@ class SpeechStreamer:
         # Convert audio data to numpy array
         np_audio_data = np.frombuffer(audio_data, dtype=np.int16)
 
-        print(f"Generated audio for text: {text}, np_audio_data length: {len(np_audio_data)}")
+        #print(f"Generated audio for text: {text}, np_audio_data length: {len(np_audio_data)}")
 
         def generator():
             for i in range(0, len(np_audio_data), CHUNK):
@@ -104,9 +110,10 @@ def stream_audio_response(streaming_text, stop_audio_event=None):
     buffer = ""
     output = ""
     resp = None
-    delay = 0.4
+    delay = 0
     for resp in streaming_text:
         if "choices" in resp:
+            model = resp['model']
             if "content" in resp["choices"][0]["delta"]:
                 text = resp["choices"][0]["delta"]["content"]
                 buffer += text
@@ -115,12 +122,28 @@ def stream_audio_response(streaming_text, stop_audio_event=None):
                 sentences = list(doc.sents)
 
                 if len(sentences) > 1:
-                    for sentence in sentences[:-1]:
-                        speech_stream.queue_text(sentence.text.strip(), delay=delay)
+                    merged_sentences = []
+                    i = 0
+                    while i < len(sentences) - 1:
+                        current_sentence = sentences[i].text.strip()
+                        next_sentence = sentences[i + 1].text.strip()
+
+                        if len(current_sentence) < 50:
+                            current_sentence += " " + next_sentence
+                            i += 2
+                        else:
+                            i += 1
+                        merged_sentences.append(current_sentence)
+
+                    if i == len(sentences) - 1:
+                        merged_sentences.append(sentences[-1].text.strip())
+
+                    for sentence in merged_sentences[:-1]:
+                        speech_stream.queue_text(sentence, delay=delay, model=model)
                         delay = 0
 
                     # Keep the last part (which may be an incomplete sentence) in the buffer
-                    buffer = sentences[-1].text
+                    buffer = merged_sentences[-1]
     if resp:
         reason = resp["choices"][0]["finish_reason"]
     else:
@@ -138,3 +161,4 @@ def stream_audio_response(streaming_text, stop_audio_event=None):
     speech_stream.queue_text(buffer)
     speech_stream.stop()
     return output, reason
+

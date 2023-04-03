@@ -2,9 +2,7 @@ import datetime
 import json
 import os
 from collections import defaultdict
-import openai
-from connections import get_openai_key, get_user
-import tiktoken
+from connections import get_user
 import spacy
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -17,17 +15,8 @@ logger = logger_config.get_logger()
 # Constants
 user = get_user()
 user_fix = user + "'" if user[-1] == "s" else user + "'s"
-model = "gpt-3.5-turbo-0301"
-temperature = 0.8
-maximum_length_message = 1300
-maximum_length_history = 7700
-top_p = 1
-frequency_penalty = 0.19
-presence_penalty = 0
 
 nlp = spacy.load("en_core_web_sm")
-openai.api_key = get_openai_key()
-enc = tiktoken.encoding_for_model(model)
 
 
 def get_time():
@@ -79,31 +68,6 @@ def get_mean_vector(doc):
     return np.mean(vectors, axis=0) if vectors else np.zeros(nlp.vocab.vectors.shape[1])
 
 
-def summarizer(input_list):
-    """
-    Summarize a conversation by sending a query to the OpenAI API.
-
-    :param input_list: A list of dictionaries containing the conversation to be summarized.
-    :type input_list: list
-    :return: A dictionary containing the role and content of the summarized conversation.
-    :rtype: dict
-    """
-    query = [{"role": "user", "content": "Please summarize this conversation concisely (Do your best to respond only"
-                                         " with your best attempt at a summary and leave out caveats, preambles, "
-                                         "or next steps)"}]
-    response = openai.ChatCompletion.create(
-        model=model,
-        messages=input_list+query,
-        temperature=temperature,
-        max_tokens=maximum_length_message,
-        top_p=top_p,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty
-    )
-    output = response['choices'][0]['message']['content']
-    return {"role": "system", "content": output}
-
-
 def extract_keywords(text):
     """
     Extract and store keywords from the given text.
@@ -125,13 +89,18 @@ class AssistantHistory:
     A class to manage the Assistant's conversation history, including storing, reducing,
     and gathering conversation context for future queries.
 
+    :param tokenizer: A function to tokenize a string.
+    :type tokenizer: function
+    :param summarizer: A function to summarize a string.
+    :type summarizer: function
     :param max_tokens: The maximum number of tokens allowed for the conversation history.
     :type max_tokens: int
     """
 
-    def __init__(self, max_tokens=maximum_length_history):
+    def __init__(self, tokenizer, summarizer, max_tokens):
         self.max_tokens = max_tokens
-        self.tokenizer = enc.encode
+        self.tokenizer = tokenizer
+        self.summarizer = summarizer
         self.history = []
         self.reduced_history = []
         self.keywords = defaultdict(list)
@@ -201,9 +170,16 @@ class AssistantHistory:
         :return: A dictionary containing the role and content of the system message.
         :rtype: dict
         """
-        system = (f"You are {user_fix} AI Assistant named Jarvis. "
+        system = (f"You are {user_fix} AI Voice Assistant named Jarvis. "
+                  "Keep in mind that voice assistants should not respond with full URLs or overly long sentences. "
+                  "For example, http://www.google.com should be shortened to Google or Google.com. "
+                  "If the user says can you hear me you should say, Yes, I can hear you, because if you are reading"
+                  "their message, you can hear them and if they are reading your messages they can hear you. "
+                  "It may be best to respond with commas indicating where to pause."
                   "You are based on the character Jarvis from the Marvel Universe. "
-                  "The current date time is "
+                  "This means you are a cool, calm, suaave, and super intelligent AI. "
+                  "The current date time as of the moment you received your most recent message has been injected"
+                  "into your memory here: "
                   + datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")) + ". " + self.long_term_memory
         return {"role": "system", "content": system}
 
@@ -213,9 +189,9 @@ class AssistantHistory:
         """
         for entry in self.history[len(self.reduced_history):]:
             to_reduce = [_strip_entry(entry[0]), _strip_entry(entry[1])]
-            new_summary = summarizer(to_reduce)
+            new_summary = self.summarizer(to_reduce)
             self.reduced_history.append(new_summary)
-        self.long_term_memory = summarizer(self.gather_context("", only_summaries=True))["content"]
+        self.long_term_memory = self.summarizer(self.gather_context("", only_summaries=True))["content"]
 
     def _update_keywords(self, query_entry, response_entry):
         """
@@ -266,7 +242,7 @@ class AssistantHistory:
                 new_keywords[keyword].append([query_entry, response_entry])
         self.keywords = new_keywords
 
-    def gather_context(self, query, minimum_recent_history_length=2, max_tokens=6500,
+    def gather_context(self, query, minimum_recent_history_length=2, max_tokens=None,
                        only_summaries=False, only_role_and_content=True):
         """
         Gathers relevant context for a given query from the chat assistant's history.
@@ -284,6 +260,8 @@ class AssistantHistory:
         :return: A list of relevant context entries for the given query
         :rtype: list
         """
+        if max_tokens is None:
+            max_tokens = int(0.85*self.max_tokens)
         if not only_summaries:
             recent_history = []
             if minimum_recent_history_length > 0:
@@ -319,8 +297,7 @@ class AssistantHistory:
             while token_count > max_tokens:
                 if len(keyword_context) > 0:
                     keyword_context.pop(0)
-                    combined_context = [entry for entry_pair in keyword_context for entry in
-                                        entry_pair] + recent_history
+                    combined_context = [entry for entry_pair in keyword_context+recent_history for entry in entry_pair]
                     token_count = self.count_tokens_text(query) + self.count_tokens_context(combined_context)
                 else:
                     break
@@ -351,7 +328,7 @@ class AssistantHistory:
         """
         out = []
         for el in self.history:
-            out.append(_strip_entry(el))
+            out.append([_strip_entry(el[0]), _strip_entry(el[1])])
         return out
 
     def save_history_to_json(self, file_name):
