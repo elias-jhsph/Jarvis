@@ -7,7 +7,7 @@ import atexit
 
 from audio_player import play_audio_file, get_next_audio_frame, start_audio_stream, stop_audio_stream
 from audio_listener import prep_mic, listen_to_user, convert_to_text
-from connections import ConnectionKeyError, get_pico_key, get_pico_path
+from connections import ConnectionKeyError, get_pico_key, get_pico_path, get_gcp_data
 from processor import processor, get_model_name
 from text_speech import text_to_speech
 
@@ -17,6 +17,19 @@ logger = logger_config.get_logger()
 
 # Set last time of request
 last_time = datetime.datetime.now() - datetime.timedelta(minutes=5)
+free_tts = False
+
+
+def check_tts(path):
+    """
+    Switch the audio path to a free version if the user has a free key.
+    :param path: str, the path to the audio file
+    :return: str, the path to the audio file
+    """
+    global free_tts
+    if free_tts:
+        path = re.sub("audio_files/", "audio_files_free/", path)
+    return path
 
 
 def jarvis_process(jarvis_stop_event, queue):
@@ -27,14 +40,21 @@ def jarvis_process(jarvis_stop_event, queue):
     try:
 
         global last_time
+        global free_tts
 
         try:
-            free = False
+            get_gcp_data()
+        except ConnectionKeyError as e:
+            free_tts = True
+            logger.info("Using free text to speech service.")
+
+        try:
+            free_wake = False
             handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
                                         keyword_paths=[get_pico_path()])
             atexit.register(handle.delete)
         except ConnectionKeyError as e:
-            free = True
+            free_wake = True
             from pocketsphinx import LiveSpeech
 
             def pocketsphinx_wake_word_detection(wake_word, stop_event):
@@ -55,14 +75,14 @@ def jarvis_process(jarvis_stop_event, queue):
         play_audio_file("audio_files/tone_one.wav", blocking=False, delay=2)
 
         prep_mic()
-        if not free:
+        if not free_wake:
             start_audio_stream(handle.sample_rate, handle.frame_length)
         try:
             queue.put("standby")
             logger.info("Listening for wake word...")
             detected = False
             while jarvis_stop_event.is_set() is False:
-                if free:
+                if free_wake:
                     if pocketsphinx_wake_word_detection("Jarvis", jarvis_stop_event):
                         detected = True
                 else:
@@ -84,7 +104,7 @@ def jarvis_process(jarvis_stop_event, queue):
                         gap = datetime.datetime.now() - last_time
                         last_time = datetime.datetime.now()
                         if gap.seconds > 60 * 5:
-                            play_audio_file("audio_files/hmm.wav")
+                            play_audio_file(check_tts("audio_files/hmm.wav"))
                         beeps_stop_event = play_audio_file("audio_files/beeps.wav", loops=7, blocking=False)
                         try:
                             logger.info("Recognizing...")
@@ -117,8 +137,8 @@ def jarvis_process(jarvis_stop_event, queue):
                         with open("inner_error.log", "w") as file:
                             file.write(str(e))
                         stop_audio_stream()
-                        play_audio_file('audio_files/minor_error.wav')
-                    if not free:
+                        play_audio_file(check_tts('audio_files/minor_error.wav'))
+                    if not free_wake:
                         start_audio_stream(handle.sample_rate, handle.frame_length)
             stop_audio_stream()
         except Exception as e:
@@ -126,12 +146,12 @@ def jarvis_process(jarvis_stop_event, queue):
             with open("outer_error.log", "w") as file:
                 file.write(str(e))
             stop_audio_stream()
-            play_audio_file('audio_files/major_error.wav')
+            play_audio_file(check_tts('audio_files/major_error.wav'))
     except ConnectionKeyError as e:
         logger.error(e, exc_info=True)
         stop_audio_stream()
-        play_audio_file('audio_files/connection_error.wav')
-    if not free:
+        play_audio_file(check_tts('audio_files/connection_error.wav'))
+    if not free_wake:
         atexit.unregister(handle.delete)
         handle.delete()
     logger.info("Jarvis process finished.")
