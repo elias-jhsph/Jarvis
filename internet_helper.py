@@ -187,6 +187,7 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
     synthesized_information = simplified_output["synthesized_information"]
     ranked_summaries = simplified_output["ranked_summaries"]
     refined_query = simplified_output["refined_query"]
+    user_query = simplified_output["initial_query"]
 
     ranked_summaries_text = "\n".join(
         [f"{i + 1}. {summary['url']} (Relevance: {summary['relevance']}):\n{summary['summary']}"
@@ -194,7 +195,9 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
     )
 
     prompt = (
-        f"Pretend I am an AI language model that has conducted an internet search for '{refined_query}'. "
+        f"The user has requested a response to the following query {user_query}."
+        f"An AI language model working with you has conducted an internet search for '{refined_query}' "
+        f"which was based on the previous user query. "
         f"I have synthesized the following information from the search results: '{synthesized_information}'. "
         f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text}\n\n"
         f"Please analyze these results and provide the most appropriate response. Consider the following options: "
@@ -216,7 +219,9 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
         if len(new) < diff+10:
             raise Exception("Could not shrink internet final prompt within limit!")
         prompt = (
-            f"An AI language model working with you has conducted an internet search for '{refined_query}'. "
+            f"The user has requested a response to the following query {user_query}."
+            f"An AI language model working with you has conducted an internet search for '{refined_query}' "
+            f"which was based on the previous user query. "
             f"It has synthesized the following information from the search results: '{synthesized_information}'. "
             f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text[:-(diff+10)]}\n\n"
             f"Please analyze these results and provide the most appropriate response to the User. "

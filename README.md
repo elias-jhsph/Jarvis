@@ -63,9 +63,9 @@ The app includes a settings menu that can be accessed by clicking on the "Settin
 - Pico Path: Set the file path for the Pico wake word detection engine .ppn file
     - This .ppn file needs to match your pico key to work 
 - Google Key: Set the Google API key for internet search queries
-    - Technically you are not supposed to use google search without using the API
+    - Technically you are not supposed to use Google search without using the API
     - If you don't add this, the googlesearch-python will be used instead
-    - To get a google api key, go to https://console.cloud.google.com/apis/credentials
+    - To get a Google api key, go to https://console.cloud.google.com/apis/credentials
 - Google CX: Set the Google API CX for internet search queries
     - This should be the custom search engine that you have access to via the google api
 - GCP JSON Path: Set the file path for the Google Cloud Platform JSON key file

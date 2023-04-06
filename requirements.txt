@@ -6,7 +6,7 @@ py2app
 PyAudio==0.2.12
 tiktoken
 pvporcupine
-SpeechRecognition
+SpeechRecognition==3.10.0
 google-api-python-client
 google-cloud-texttospeech
 certifi
