@@ -7,6 +7,7 @@ import atexit
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QAction
 import settings_menu
+import connections
 from jarvis_process import jarvis_process
 
 import logger_config
@@ -46,7 +47,7 @@ def clean_up_files():
 class JarvisApp(QApplication):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        logger.info("CWD "+os.getcwd())
         self.config = {
             "app_name": "Jarvis",
             "start": "Start Listening",
@@ -54,11 +55,6 @@ class JarvisApp(QApplication):
             "quit": "Quit",
             "break_message": "Stopped",
         }
-        self.icon = "icons/icon.icns"
-
-        self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(QIcon(self.icon))
-        self.tray_icon.setVisible(True)
 
         self.menu = QMenu()
 
@@ -73,7 +69,7 @@ class JarvisApp(QApplication):
         self.quit_action = QAction(self.config["quit"], self)
         self.quit_action.triggered.connect(self.quit_listener)
         self.menu.addAction(self.quit_action)
-
+        self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setContextMenu(self.menu)
 
         # Your initialization code
@@ -84,11 +80,15 @@ class JarvisApp(QApplication):
         self._set_environment()
         self.message_queue = None
         self.process_status = None
-        self.icon_thread = None
         self.stop_event = multiprocessing.Event()
+        self.icon_thread = None
         clean_up_files()
         atexit.register(self.cleanup)
         logger.info("Ready!")
+        self.icon = os.path.join(os.getcwd(), "icon.icns")
+        self.tray_icon.setIcon(QIcon(self.icon))
+        self.tray_icon.setVisible(True)
+        self.tray_icon.show()
 
     def settings_listener(self):
         """Opens the settings pop-up menu."""
@@ -116,36 +116,39 @@ class JarvisApp(QApplication):
             os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
 
     def flash_icon(self):
+        default_icon = os.path.join(os.getcwd(), "icons/icon.icns")
         while self.message_queue is not None:
             if not self.message_queue.empty():
                 self.process_status = self.message_queue.get()
 
             if self.process_status == "standby":
-                if self.icon == "icons/icon.icns":
-                    self.icon = "icons/listening.icns"  # Change to the second icon
+                if self.icon == default_icon:
+                    self.icon = os.path.join(os.getcwd(), "icons/listening.icns")  # Change to the second icon
                 else:
-                    self.icon = "icons/icon.icns"  # Change back to the first icon
+                    self.icon = default_icon  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "listening":
-                self.icon = "icons/listening.icns"  # Change back to the first icon
+                self.icon = os.path.join(os.getcwd(), "icons/listening.icns")  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "processing":
-                if self.icon == "icons/processing_middle.icns":
-                    self.icon = "icons/processing_small.icns"  # Change to the second icon
+                if self.icon == os.path.join(os.getcwd(), "icons/processing_middle.icns"):
+                    self.icon = os.path.join(os.getcwd(), "icons/processing_small.icns")
+                    # Change to the second icon
                 else:
-                    self.icon = "icons/processing_middle.icns"  # Change back to the first icon
+                    self.icon = os.path.join(os.getcwd(), "icons/processing_middle.icns")
+                    # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "goodbye":
-                self.icon = "icons/icon.icns"
+                self.icon = default_icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 break
             else:
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_fast_speed)
-        self.icon = "icons/icon.icns"
+        self.icon = default_icon
         self.tray_icon.setIcon(QIcon(self.icon))
         logger.info("Exiting icon thread")
 
@@ -159,8 +162,10 @@ class JarvisApp(QApplication):
                 self.icon_thread = threading.Thread(target=self.flash_icon)
                 self.icon_thread.daemon = True
                 self.icon_thread.start()
+                self.stop_event = multiprocessing.Event()
                 self.ps = multiprocessing.Process(target=jarvis_process,
-                                                  args=([self.stop_event, self.message_queue]))
+                                                  args=([self.stop_event, self.message_queue,
+                                                         connections.get_connection_ring()]))
                 self.ps.start()
             self.start_stop_action.setText(self.config["stop"])
         else:

@@ -135,5 +135,4 @@ output.wav
 .idea/
 EXCLUDE.py
 connections_INTERNAL.py
-*.log
 *.log*

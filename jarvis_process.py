@@ -7,7 +7,7 @@ import atexit
 
 from audio_player import play_audio_file, get_next_audio_frame, start_audio_stream, stop_audio_stream
 from audio_listener import prep_mic, listen_to_user, convert_to_text
-from connections import ConnectionKeyError, get_pico_key, get_pico_path, get_gcp_data
+from connections import ConnectionKeyError, get_pico_key, get_pico_path, get_gcp_data, set_connection_ring
 from processor import processor, get_model_name
 from text_speech import text_to_speech
 
@@ -32,7 +32,7 @@ def check_tts(path):
     return path
 
 
-def jarvis_process(jarvis_stop_event, queue):
+def jarvis_process(jarvis_stop_event, queue, codes):
     """
     Main function to run the Jarvis voice assistant process.
     """
@@ -41,6 +41,9 @@ def jarvis_process(jarvis_stop_event, queue):
 
         global last_time
         global free_tts
+
+        set_connection_ring(codes)
+
 
         try:
             get_gcp_data()
@@ -99,12 +102,10 @@ def jarvis_process(jarvis_stop_event, queue):
                         queue.put("listening")
                         query_audio = listen_to_user()
                         queue.put("processing")
-                        logger.info("adjusting mic for next time...")
-                        prep_mic()
                         gap = datetime.datetime.now() - last_time
                         last_time = datetime.datetime.now()
-                        if gap.seconds > 60 * 5:
-                            play_audio_file(check_tts("audio_files/hmm.wav"))
+                        # if gap.seconds > 60 * 5:
+                        #     play_audio_file(check_tts("audio_files/hmm.wav"))
                         beeps_stop_event = play_audio_file("audio_files/beeps.wav", loops=7, blocking=False)
                         try:
                             logger.info("Recognizing...")
@@ -127,8 +128,9 @@ def jarvis_process(jarvis_stop_event, queue):
                             play_audio_file(audio_path)
                             os.remove(audio_path)
                             time.sleep(0.1)
-                        queue.put("standby")
+                        logger.info("Adjusting mic...")
                         prep_mic()
+                        queue.put("standby")
                         logger.info("Finished processing")
                         play_audio_file("audio_files/tone_one.wav", blocking=True)
                         logger.info("Listening for wake word...")

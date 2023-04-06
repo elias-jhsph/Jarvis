@@ -1,4 +1,6 @@
 import tiktoken
+import certifi
+import os
 import openai
 import atexit
 import time
@@ -12,6 +14,9 @@ import re
 import logger_config
 logger = logger_config.get_logger()
 
+os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+os.environ["SSL_CERT_FILE"] = certifi.where()
+
 # Configuration
 models = {"primary": {"name": "gpt-4",
                       "max_message": 800,
@@ -20,7 +25,7 @@ models = {"primary": {"name": "gpt-4",
                       "top_p": 1,
                       "frequency_penalty": 0.19,
                       "presence_penalty": 0},
-          "limit": 2,
+          "limit": 7,
           "time": 60*60,
           "requests": [],
           "fall_back": {"name": "gpt-3.5-turbo-0301",
@@ -39,7 +44,7 @@ try:
     openai.api_key = get_openai_key()
 except ConnectionKeyError:
     logger.warning("OpenAI key not found!")
-enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0301")
+enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
 assert enc.decode(enc.encode("hello world")) == "hello world"
 
 # Setup background task system
@@ -211,6 +216,43 @@ def generate_response(query, query_history_role="user", query_role="user"):
     return output
 
 
+def generate_simple_response(history):
+    """
+    Generate a response to the given query.
+
+    :param history: The user's input query.
+    :type history: list
+    :return: The AI Assistant's response.
+    """
+    model = get_model()
+    try:
+        response = openai.ChatCompletion.create(
+            model=model["name"],
+            messages=history,
+            temperature=model["temperature"],
+            max_tokens=model["max_message"],
+            top_p=model["top_p"],
+            frequency_penalty=model["frequency_penalty"],
+            presence_penalty=model["presence_penalty"]
+        )
+    except openai.error.RateLimitError:
+        log_model(model["name"])
+        model = get_model(error=True)
+        response = openai.ChatCompletion.create(
+            model=model["name"],
+            messages=history,
+            temperature=model["temperature"],
+            max_tokens=model["max_message"],
+            top_p=model["top_p"],
+            frequency_penalty=model["frequency_penalty"],
+            presence_penalty=model["presence_penalty"]
+        )
+
+    output = response['choices'][0]['message']['content']
+    reason = response['choices'][0]["finish_reason"]
+    return output, reason
+
+
 def stream_response(query, query_history_role="user", query_role="user"):
     """
     stream a response to the given query.
@@ -297,7 +339,7 @@ def get_last_response():
     :return: A tuple containing the last user query and the last AI Assistant response.
     :rtype: tuple
     """
-    return history_access.get_history()[-1][1]
+    return history_access.get_history()[-1]
 
 
 def safe_wait():

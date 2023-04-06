@@ -20,10 +20,10 @@ RATE = 16000
 
 
 class SpeechStreamer:
-    def __init__(self):
+    def __init__(self, stop_other_audio=None):
         self.queue = queue.Queue()
         self.playing = False
-        self.thread = threading.Thread(target=self._play_audio)
+        self.thread = threading.Thread(target=self._play_audio, args=(stop_other_audio,))
         self.thread.daemon = True
         self.thread.start()
         self.stream = None
@@ -33,11 +33,14 @@ class SpeechStreamer:
         self.lock = threading.Lock()
         self.done = False
 
-    def _play_audio(self):
+    def _play_audio(self, stop_other_audio=None):
         while True:
             generator, sample_rate = self.queue.get()
             if generator is None:
                 next
+            else:
+                if stop_other_audio:
+                    stop_other_audio.set()
 
             if not self.playing:
                 self.playing = True
@@ -104,13 +107,11 @@ class SpeechStreamer:
 
 
 def stream_audio_response(streaming_text, stop_audio_event=None):
-    if stop_audio_event is not None:
-        stop_audio_event.set()
-    speech_stream = SpeechStreamer()
+    speech_stream = SpeechStreamer(stop_other_audio=stop_audio_event)
     buffer = ""
     output = ""
     resp = None
-    delay = 0
+    delay = 0.5
     for resp in streaming_text:
         if "choices" in resp:
             model = resp['model']

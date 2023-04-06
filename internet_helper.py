@@ -187,6 +187,7 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
     synthesized_information = simplified_output["synthesized_information"]
     ranked_summaries = simplified_output["ranked_summaries"]
     refined_query = simplified_output["refined_query"]
+    user_query = simplified_output["initial_query"]
 
     ranked_summaries_text = "\n".join(
         [f"{i + 1}. {summary['url']} (Relevance: {summary['relevance']}):\n{summary['summary']}"
@@ -194,19 +195,23 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
     )
 
     prompt = (
-        f"Pretend I am an AI language model that has conducted an internet search for '{refined_query}'. "
-        f"I have synthesized the following information from the search results: '{synthesized_information}'. "
+        f"The user has requested a response to the following query {user_query}. "
+        f"An AI language model working with you has conducted an internet search for '{refined_query}' "
+        f"which was based on the previous user query. "
+        f"It has synthesized the following information from the search results: '{synthesized_information}'. "
         f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text}\n\n"
-        f"Please analyze these results and provide the most appropriate response. Consider the following options: "
+        f"Please analyze these results and provide the most appropriate response to the User. "
+        f"Consider the following options: "
         f"1. Pass along the final summary\n"
         f"2. Provide a very short final answer\n"
         f"3. Suggest specific websites for further reading\n"
         f"4. Recommend a deeper search or further inquiry\n"
         f"5. Offer color commentary on the findings\n"
         f"6. Combine any of the above options.\n"
-        f"NOTE: Give me the exact response that you would have me give the user. "
-        f"Assume the user doesn't have access to these results so any component you want to refer to"
-        f"remember to reiterate it for the user!"
+        f"NOTE: Give me the exact response that you would have me give the user. DO NOT mention which approach you"
+        f"chose. Give the response exactly as you would give it to the end user.\n"
+        f"Remember - the user doesn't have access to the results above so any text you want to refer from above "
+        f"you must reiterate it for the user! And don't forget your first system message (NO FULL URLS)! Good luck!"
     )
 
     tokens = enc.encode(prompt)
@@ -216,7 +221,9 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
         if len(new) < diff+10:
             raise Exception("Could not shrink internet final prompt within limit!")
         prompt = (
-            f"An AI language model working with you has conducted an internet search for '{refined_query}'. "
+            f"The user has requested a response to the following query {user_query}. "
+            f"An AI language model working with you has conducted an internet search for '{refined_query}' "
+            f"which was based on the previous user query. "
             f"It has synthesized the following information from the search results: '{synthesized_information}'. "
             f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text[:-(diff+10)]}\n\n"
             f"Please analyze these results and provide the most appropriate response to the User. "
@@ -228,8 +235,8 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
             f"5. Offer color commentary on the findings\n"
             f"6. Combine any of the above options.\n"
             f"NOTE: Give me the exact response that you would have me give the user. DO NOT mention which approach you"
-            f"chose. Give the response exactly as you would give it to the end user."
-            f"Remember - the user doesn't have access to the results above so any text you want to refer from above"
+            f"chose. Give the response exactly as you would give it to the end user.\n"
+            f"Remember - the user doesn't have access to the results above so any text you want to refer from above "
             f"you must reiterate it for the user! And don't forget your first system message (NO FULL URLS)! Good luck!"
         )
     return prompt

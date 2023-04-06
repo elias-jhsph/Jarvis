@@ -7,7 +7,6 @@ import platform
 import logging
 from setuptools import setup, find_packages
 
-
 # Set up a logger
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] - %(message)s',
@@ -39,7 +38,6 @@ sys.setrecursionlimit(2000)
 
 # Mapping of package names to import names or 'SKIP' if they should not be included
 PACKAGE_NAME_MAPPING = {
-    'google-api-python-client': 'SKIP',
     'google-api-core': 'SKIP',
     'google-auth': 'SKIP',
     'google-cloud-texttospeech': 'SKIP',
@@ -52,6 +50,7 @@ PACKAGE_NAME_MAPPING = {
     'speechrecognition': 'speech_recognition',
     'six': 'six',
     'soundfile': 'soundfile',
+    'sounddevice': 'sounddevice',
     'scikit-learn': 'sklearn',
     'threadpoolctl': 'SKIP',
     'ffmpeg-python': 'ffmpeg',
@@ -62,9 +61,13 @@ PACKAGE_NAME_MAPPING = {
     'jaraco.classes': 'SKIP',
     'pyqt6': 'PyQt6',
     'pyqt6-qt6': 'SKIP',
-    'pyqt6-sip': 'SKIP'
+    'pyqt6-sip': 'SKIP',
+    'pycryptodomex': 'Cryptodome',
+    'pyyaml': 'yaml',
+    'googlesearch-python': 'googlesearch',
 }
 ADDED_PACKAGES = ['en_core_web_sm']
+INJECTED_PACKAGES = ['tiktoken_ext.openai_public']
 
 
 def parse_installed_packages(file):
@@ -141,15 +144,24 @@ APP = ['jarvis.py']
 DATA_FILES = [
     'Jarvis_en_linux_v2_1_0.ppn', 'Jarvis_en_mac_v2_1_0.ppn', 'config_data.json', 'jarvis_process.py',
     'gpt_interface.py', 'text_speech.py', 'history.json', 'connections.py', 'logger_config.py', 'requirements.txt',
-    'audio_listener.py', 'icon.icns', 'processor.py', 'internet_helper.py',
-    'assistant_history.py', 'logger_config.py', 'settings_menu.py', 'subprocess_access.py',
+    'audio_listener.py', 'audio_player.py', 'icon.icns', 'processor.py', 'internet_helper.py',
+    'assistant_history.py', 'logger_config.py', 'settings_menu.py', 'streaming_response_audio.py',
     ("audio_files", ['audio_files/beeps.wav', 'audio_files/booting.wav', 'audio_files/go_on.wav',
                      'audio_files/hmm.wav', 'audio_files/listening.wav', 'audio_files/major_error.wav',
-                     'audio_files/mic_error.wav', 'audio_files/minor_error.wav', 'audio_files/processing.wav',
+                     'audio_files/mic_error.wav', 'audio_files/minor_error.wav',
                      'audio_files/ready_in.wav', 'audio_files/standard_response.wav', 'audio_files/thinking.wav',
                      'audio_files/tone_one.wav', 'audio_files/tone_two.wav', 'audio_files/yes.wav',
                      "audio_files/searching.wav", 'audio_files/connection_error.wav'
                      ]),
+    ("free_audio_files", ['free_audio_files/beeps.wav', 'free_audio_files/booting.wav', 'free_audio_files/go_on.wav',
+                     'free_audio_files/hmm.wav', 'free_audio_files/listening.wav', 'audio_files/major_error.wav',
+                     'free_audio_files/mic_error.wav', 'free_audio_files/minor_error.wav',
+                     'free_audio_files/ready_in.wav', 'free_audio_files/standard_response.wav', 'audio_files/thinking.wav',
+                     'free_audio_files/tone_one.wav', 'free_audio_files/tone_two.wav', 'audio_files/yes.wav',
+                     "free_audio_files/searching.wav", 'free_audio_files/connection_error.wav'
+                     ]),
+    ("icons", ['icons/icon.icns', 'icons/listening.icns', 'icons/processing_middle.icns',
+               'icons/processing_small.icns']),
     ('../Frameworks', [sound_c_path])
     ]
 
@@ -176,6 +188,7 @@ OPTIONS = {
         'google.protobuf',
         'google.proto',
         'google_auth_httplib2',
+        'tiktoken_ext.openai_public'
     ]
 }
 
@@ -185,5 +198,5 @@ setup(
     data_files=DATA_FILES,
     options={'py2app': OPTIONS},
     setup_requires=['py2app'],
-    install_requires=['rumps']
+    install_requires=['tiktoken']
 )

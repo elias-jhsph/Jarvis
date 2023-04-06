@@ -123,7 +123,7 @@ def _play_audio_file_blocking(file_path, stop_event, loops, delay, destroy):
                             stream.write(data)
                             data = wf.readframes(chunk)
                         else:
-                            data = fade_out(data, fade_duration=1000)  # Adjust fade_duration for a very short fade-out
+                            data = fade_out(data, 400)  # Adjust fade_duration for a very short fade-out
                             stream.write(data)
                             break
         try:

@@ -151,31 +151,70 @@ def split_longest_sentence(text, max_length=200):
     return modified_text
 
 
-def split_sentence(sentence, max_length=200):
+def capitalize_first_letter(sentence: str) -> str:
     """
-    Split the given sentence into smaller sentences.
-    :param sentence:
-    :param max_length:
-    :return:
+    Capitalize the first letter of the given sentence.
+
+    :param sentence: The sentence to capitalize the first letter.
+    :return: The sentence with the first letter capitalized.
     """
-    if len(sentence) <= max_length:
+    if len(sentence) > 0:
+        return sentence[0].upper() + sentence[1:]
+    return sentence
+
+
+def remove_trailing_comma(sentence: str) -> str:
+    """
+    Remove trailing comma from the given sentence.
+
+    :param sentence: The sentence to remove the trailing comma.
+    :return: The sentence without the trailing comma.
+    """
+    return sentence.rstrip(',')
+
+
+def find_best_split(sentence: str) -> int:
+    """
+    Find the best split index for a given sentence, considering commas, colons, and semicolons.
+
+    :param sentence: The input sentence to find the best split index.
+    :return: The best split index or None if there are no delimiters.
+    """
+    # Find the indices of all delimiters
+    delimiter_indices = [m.start() for m in re.finditer(r'[:,;]', sentence)]
+
+    if not delimiter_indices:
+        return None
+
+    # Calculate the lengths of the two halves for each delimiter
+    half_lengths = [(abs(len(sentence[:i]) - len(sentence[i+1:])), i) for i in delimiter_indices]
+
+    # Find the delimiter that results in the most evenly-sized halves
+    best_split_index = min(half_lengths, key=lambda x: x[0])[1]
+
+    return best_split_index
+
+
+def split_sentence(sentence: str) -> list:
+    """
+    Split the input sentence into two parts at the best delimiter.
+
+    :param sentence: The input sentence to split.
+    :return: A list of two sentences after splitting.
+    """
+    best_split_index = find_best_split(sentence)
+
+    if best_split_index is None:
         return [sentence]
 
-    words = sentence.split()
-    chunks = []
-    current_chunk = []
+    first_half = sentence[:best_split_index].strip()
+    second_half = sentence[best_split_index + 1:].strip()
 
-    for word in words:
-        if len(" ".join(current_chunk) + " " + word) <= max_length:
-            current_chunk.append(word)
-        else:
-            chunks.append(" ".join(current_chunk))
-            current_chunk = [word]
+    # Capitalize the first letter and remove trailing commas
+    first_half = capitalize_first_letter(remove_trailing_comma(first_half))
+    second_half = capitalize_first_letter(remove_trailing_comma(second_half))
 
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-
-    return chunks
+    return [first_half, second_half]
 
 
 def free_text_to_speech(text: str, model="gpt-4", stream=False):
@@ -193,7 +232,7 @@ def free_text_to_speech(text: str, model="gpt-4", stream=False):
         audio_content = wav_buffer.read()
         return audio_content
     else:
-        output_file = str(uuid.uuid4()) + ".wav"
+        output_file = "audio_output/" + str(uuid.uuid4()) + ".wav"
         mp3_output = io.BytesIO()
         tts.write_to_fp(mp3_output)
         mp3_output.seek(0)
