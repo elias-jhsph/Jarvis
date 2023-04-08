@@ -83,6 +83,7 @@ The following links were helpful in creating this app:
 - OpenAI Speech-to-Text https://platform.openai.com/docs/guides/speech-to-text/prompting
 - Creating a macOS Menu Bar App https://camillovisini.com/article/create-macos-menu-bar-app-pomodoro/
 - Python Sounddevice Issues https://github.com/spatialaudio/python-sounddevice/issues/130
+- Chroma https://docs.trychroma.com/getting-started
 
 ## License
 GNU Affero General Public License v3.0
