@@ -1,14 +1,12 @@
 mailjet_rest
 numpy
-rumps
 openai
 openai-whisper
 py2app
-pygame
 PyAudio==0.2.12
 tiktoken
 pvporcupine
-SpeechRecognition
+SpeechRecognition==3.10.0
 google-api-python-client
 google-cloud-texttospeech
 certifi
@@ -20,3 +18,8 @@ keyring
 PyQt6
 scikit-learn
 dmgbuild
+gtts
+pydub
+googlesearch-python
+pocketsphinx
+chromadb==0.3.21

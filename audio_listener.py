@@ -43,7 +43,7 @@ def listen_to_user():
     window_size = 10
     volume_buffer = []
     silence_duration = 0
-    silence_threshold = 1.5
+    silence_threshold = 2
     start = time.time()
 
     logger.info("Listening to user...")

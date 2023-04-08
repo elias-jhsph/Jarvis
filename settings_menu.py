@@ -10,29 +10,26 @@ class SettingsDialog(QDialog):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Settings")
+        self.setWindowTitle("Jarvis Settings")
 
         layout = QVBoxLayout()
 
         # Add a centered title "Settings"
-        title = QLabel("Settings")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
 
         self.list_widget = QListWidget()
         self.list_widget.itemClicked.connect(self.handle_click)
         self.set_list_widget_style()
-        self.setMinimumSize(250, 480)
+        self.setMinimumSize(350, 500)
 
         choices = [
             'Set User',
             'Set Emails',
-            'Set Mailjet Key and Secret',
-            'Set OpenAI Key',
-            'Set Pico Key',
-            'Set Pico Path',
-            'Set Google Key',
-            'Set GCP JSON Path',
+            'Set OpenAI API Key',
+            'Set Mailjet Key and Secret (Optional)',
+            'Set Pico API Key (Optional)',
+            'Set Pico path to .ppn (Optional)',
+            'Set Google Key and CX (Optional)',
+            'Set GCP JSON Path (Recommended)',
         ]
 
         for choice in choices:
@@ -54,17 +51,26 @@ class SettingsDialog(QDialog):
         # Set initial button colors
         self.update_item_colors()
 
+
     def update_item_colors(self):
         error_setters = find_setters_that_throw_errors()
+
+        function_mapping = {
+            'Set User': 'set_user',
+            'Set Emails': 'set_emails',
+            'Set OpenAI API Key': 'set_openai_key',
+            'Set Mailjet Key and Secret (Optional)': 'set_mj_key_and_secret',
+            'Set Pico API Key (Optional)': 'set_pico_key',
+            'Set Pico path to .ppn (Optional)': 'set_pico_path',
+            'Set Google Key and CX (Optional)': 'set_google_key_and_ck',
+            'Set GCP JSON Path (Recommended)': 'set_gcp_data'
+        }
 
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)
             choice = item.text()
-            function_name = choice.lower().replace(' ', '_').replace('-', '_').replace('mailjet', 'mj')
-            if function_name == "set_google_key":
-                function_name = "set_google"
-            if function_name == "set_gcp_json_path":
-                function_name = "set_gcp_data"
+            function_name = function_mapping[choice]
+
             if function_name in error_setters:
                 button_color = "#8b0000"  # red
             else:
@@ -96,16 +102,30 @@ class SettingsDialog(QDialog):
         function_mapping = {
             'Set User': set_user,
             'Set Emails': set_emails,
-            'Set Mailjet Key and Secret': set_mj_key_and_secret,
-            'Set OpenAI Key': set_openai_key,
-            'Set Pico Key': set_pico_key,
-            'Set Pico Path': set_pico_path,
-            'Set Google Key': set_google,
-            'Set GCP JSON Path': set_gcp_data
+            'Set OpenAI API Key': set_openai_key,
+            'Set Mailjet Key and Secret (Recommended)': set_mj_key_and_secret,
+            'Set Pico API Key (Optional)': set_pico_key,
+            'Set Pico path to .ppn (Optional)': set_pico_path,
+            'Set Google Key and CX (Optional)': set_google_key_and_ck,
+            'Set GCP JSON Path (Optional)': set_gcp_data
         }
 
         try:
-            if choice in ['Set Pico Key', 'Set OpenAI Key', 'Set Google Key', 'Set Emails', 'Set User']:
+            if choice.find('Path') != -1:
+                path, _ = QFileDialog.getOpenFileName()
+                if path:
+                    function_mapping[choice](path)
+            elif choice == 'Set Mailjet Key and Secret (Recommended)':
+                value_key, ok_key = QInputDialog.getText(self, "Enter your Mailjet Key:", "")
+                value_secret, ok_secret = QInputDialog.getText(self, "Enter your Mailjet Secret:", "")
+                if ok_key and ok_secret:
+                    function_mapping[choice](value_key, value_secret)
+            elif choice == 'Set Google Key and CX (Optional)':
+                value_key, ok_key = QInputDialog.getText(self, "Enter your Google Key:", "")
+                value_secret, ok_secret = QInputDialog.getText(self, "Enter your Google CX:", "")
+                if ok_key and ok_secret:
+                    function_mapping[choice](value_key, value_secret)
+            else:
                 input_dialog = QInputDialog(self)
                 input_dialog.setInputMode(QInputDialog.InputMode.TextInput)
                 input_dialog.setWindowTitle(f"Update {choice.split(' ')[1]}")
@@ -117,15 +137,6 @@ class SettingsDialog(QDialog):
 
                 if ok:
                     function_mapping[choice](value)
-            elif choice == 'Set Pico Path' or choice == 'Set GCP JSON Path':
-                path, _ = QFileDialog.getOpenFileName()
-                if path:
-                    function_mapping[choice](path)
-            elif choice == 'Set Mailjet Key and Secret':
-                value_key, ok_key = QInputDialog.getText(self, "Enter your Mailjet Key:", "")
-                value_secret, ok_secret = QInputDialog.getText(self, "Enter your Mailjet Secret:", "")
-                if ok_key and ok_secret:
-                    function_mapping[choice](value_key, value_secret)
             self.warning_label.setVisible(True)
             self.update_item_colors()
             self.list_widget.clearSelection()
@@ -134,7 +145,10 @@ class SettingsDialog(QDialog):
 
 
 def main():
-    app = QApplication(sys.argv)
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
     app.setStyle("Fusion")
 
     # Set up the dark theme
@@ -154,7 +168,8 @@ def main():
     app.setPalette(palette)
 
     dialog = SettingsDialog()
-    dialog.exec()
+    dialog.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
