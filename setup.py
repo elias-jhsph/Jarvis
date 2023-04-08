@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import re
 import subprocess
 import sys
@@ -21,18 +22,18 @@ if PUBLIC:
         code = f.read()
     with open("connections.py", "w") as f:
         f.write(re.sub("#####REMOVE#####[\s\S]+?#####REMOVE#####","",code))
-    os.rename("history.json", "private_history.json")
     with open("connections.py", "w") as f:
         json.dump({"history": [], "reduced_history": [], "keywords": {}, "long_term_memory": ""}, f)
+    shutil.rmtree("database", ignore_errors=True)
+    os.mkdir("database")
 else:
     import EXCLUDE
     with open("connections_INTERNAL.py", "r") as f:
         code = f.read()
     with open("connections.py", "w") as f:
         f.write(code)
-    if not os.path.exists("history.json"):
-        with open("history.json", "w") as f:
-            json.dump({"history": [], "reduced_history": [], "keywords": {}, "long_term_memory": ""}, f)
+    if not os.path.exists("database"):
+        os.mkdir("database")
 
 sys.setrecursionlimit(2000)
 
@@ -143,7 +144,7 @@ APP = ['jarvis.py']
 
 DATA_FILES = [
     'Jarvis_en_linux_v2_1_0.ppn', 'Jarvis_en_mac_v2_1_0.ppn', 'config_data.json', 'jarvis_process.py',
-    'gpt_interface.py', 'text_speech.py', 'history.json', 'connections.py', 'logger_config.py', 'requirements.txt',
+    'gpt_interface.py', 'text_speech.py', 'connections.py', 'logger_config.py', 'requirements.txt',
     'audio_listener.py', 'audio_player.py', 'icon.icns', 'processor.py', 'internet_helper.py',
     'assistant_history.py', 'logger_config.py', 'settings_menu.py', 'streaming_response_audio.py',
     ("audio_files", ['audio_files/beeps.wav', 'audio_files/booting.wav', 'audio_files/go_on.wav',
@@ -154,14 +155,16 @@ DATA_FILES = [
                      "audio_files/searching.wav", 'audio_files/connection_error.wav'
                      ]),
     ("free_audio_files", ['free_audio_files/beeps.wav', 'free_audio_files/booting.wav', 'free_audio_files/go_on.wav',
-                     'free_audio_files/hmm.wav', 'free_audio_files/listening.wav', 'audio_files/major_error.wav',
-                     'free_audio_files/mic_error.wav', 'free_audio_files/minor_error.wav',
-                     'free_audio_files/ready_in.wav', 'free_audio_files/standard_response.wav', 'audio_files/thinking.wav',
-                     'free_audio_files/tone_one.wav', 'free_audio_files/tone_two.wav', 'audio_files/yes.wav',
-                     "free_audio_files/searching.wav", 'free_audio_files/connection_error.wav'
-                     ]),
+                          'free_audio_files/hmm.wav', 'free_audio_files/listening.wav', 'audio_files/major_error.wav',
+                          'free_audio_files/mic_error.wav', 'free_audio_files/minor_error.wav',
+                          'free_audio_files/ready_in.wav', 'free_audio_files/standard_response.wav',
+                          'audio_files/thinking.wav', 'free_audio_files/tone_one.wav', 'free_audio_files/tone_two.wav',
+                          'audio_files/yes.wav', "free_audio_files/searching.wav",
+                          'free_audio_files/connection_error.wav'
+                          ]),
     ("icons", ['icons/icon.icns', 'icons/listening.icns', 'icons/processing_middle.icns',
                'icons/processing_small.icns']),
+    ("database", []),
     ('../Frameworks', [sound_c_path])
     ]
 

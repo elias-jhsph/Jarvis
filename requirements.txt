@@ -22,3 +22,4 @@ gtts
 pydub
 googlesearch-python
 pocketsphinx
+chromadb==0.3.21

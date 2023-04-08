@@ -112,9 +112,11 @@ def stream_audio_response(streaming_text, stop_audio_event=None):
     output = ""
     resp = None
     delay = 0.5
+    model = None
     for resp in streaming_text:
         if "choices" in resp:
-            model = resp['model']
+            if model is None:
+                model = resp['model']
             if "content" in resp["choices"][0]["delta"]:
                 text = resp["choices"][0]["delta"]["content"]
                 buffer += text
