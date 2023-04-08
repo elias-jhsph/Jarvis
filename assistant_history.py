@@ -25,7 +25,14 @@ def _strip_entry(entry):
     :return: A new dictionary containing only the 'role' and 'content' fields from the original entry.
     :rtype: dict
     """
-    return {'role': entry['role'], 'content': entry['content']}
+
+    if isinstance(entry, list):
+        new = []
+        for el in entry:
+            new.append(_strip_entry(el))
+        return new
+    else:
+        return {'role': entry['role'], 'content': entry['content']}
 
 
 class AssistantHistory:
@@ -151,7 +158,11 @@ class AssistantHistory:
         """
         total = 0
         for el in ls:
-            total += self.count_tokens_text(el['content'])
+            if isinstance(el, list):
+                for e in el:
+                    total += self.count_tokens_text(e['content'])
+            else:
+                total += self.count_tokens_text(el['content'])
         return total
 
     def add_user_query(self, query, role="user"):
@@ -378,6 +389,7 @@ class AssistantHistory:
             context_list = [_strip_entry(entry) for entry in context_list]
 
         return [self.get_system()] + context_list
+
 
     def get_history(self):
         """
