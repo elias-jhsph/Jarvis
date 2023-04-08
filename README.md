@@ -5,7 +5,7 @@ This README provides instructions on how to install, set up, and use a simple vo
 ## Installation
 
 1. Clone or download the repository.
-2. Set up the environment using a virtual environment for python 3.10 (Make sure to use arm arch if m1 including brew):
+2. Set up the environment using a virtual environment for python 3.10.11 (Make sure to use arm arch if m1 including brew):
 ```
 brew install portaudio
 brew install ffmpeg

@@ -79,7 +79,7 @@ def parse_installed_packages(file):
     :return: A list of package names.
     """
     with open(file, 'r') as f:
-        return [line.strip() for line in f.readlines()]
+        return [line.strip() for line in f.readlines() if line.strip() != "pipdeptree"]
 
 
 def get_dependency_tree(packages):
