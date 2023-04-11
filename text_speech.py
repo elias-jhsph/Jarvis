@@ -1,3 +1,6 @@
+import subprocess
+import sys
+import os
 from google.api_core.exceptions import InvalidArgument
 from google.cloud import texttospeech
 from google.oauth2 import service_account
@@ -218,25 +221,52 @@ def split_sentence(sentence: str) -> list:
 
 
 def free_text_to_speech(text: str, model="gpt-4", stream=False):
-    slow_flag = False if not model.find("gpt-4") >= 0 else True
-    tts = gTTS(text, lang='en', slow=slow_flag)
+    """
+    Convert the given text to speech using the specified model.
 
-    if stream:
-        mp3_buffer = io.BytesIO()
-        tts.write_to_fp(mp3_buffer)
-        mp3_buffer.seek(0)
-        mp3_segment = AudioSegment.from_file(mp3_buffer, format="mp3")
-        wav_buffer = io.BytesIO()
-        mp3_segment.export(wav_buffer, format="wav")
-        wav_buffer.seek(0)
-        audio_content = wav_buffer.read()
-        return audio_content
-    else:
+    :param text: The text to convert to speech.
+    :param model: The model to use for text-to-speech.
+    :param stream: Whether to return the audio content as a stream.
+    :return: The path to the audio file or the audio content as a stream.
+    """
+    slow_flag = True
+    if model.find("gpt-4") >= 0:
+        slow_flag = False
+    if sys.platform == 'darwin':
+        fixed_text = text.replace('"', r'\"')
+        pitch = "44"
+        if slow_flag:
+            pitch = "40"
+        text_cmd = f'[[pbas {pitch}]] "{fixed_text}"'
+
         output_file = "audio_output/" + str(uuid.uuid4()) + ".wav"
-        mp3_output = io.BytesIO()
-        tts.write_to_fp(mp3_output)
-        mp3_output.seek(0)
-        mp3_segment = AudioSegment.from_file(mp3_output, format="mp3")
-        mp3_segment.export(output_file, format="wav")
-        logger.info(f'Audio content written to file "{output_file}" using free text-to-speech alternative')
-        return output_file
+        subprocess.run(['say', text_cmd, "-o", output_file, '--data-format=LEI16@22050'])
+        if not stream:
+            return output_file
+        with open(output_file, 'rb') as file:
+            file.seek(0)
+            byte_data = file.read()
+        os.remove(output_file)
+        return byte_data
+    else:
+        tts = gTTS(text, lang='en', slow=slow_flag)
+
+        if stream:
+            mp3_buffer = io.BytesIO()
+            tts.write_to_fp(mp3_buffer)
+            mp3_buffer.seek(0)
+            mp3_segment = AudioSegment.from_file(mp3_buffer, format="mp3")
+            wav_buffer = io.BytesIO()
+            mp3_segment.export(wav_buffer, format="wav")
+            wav_buffer.seek(0)
+            audio_content = wav_buffer.read()
+            return audio_content
+        else:
+            output_file = "audio_output/" + str(uuid.uuid4()) + ".wav"
+            mp3_output = io.BytesIO()
+            tts.write_to_fp(mp3_output)
+            mp3_output.seek(0)
+            mp3_segment = AudioSegment.from_file(mp3_output, format="mp3")
+            mp3_segment.export(output_file, format="wav")
+            logger.info(f'Audio content written to file "{output_file}" using free text-to-speech alternative')
+            return output_file

@@ -15,15 +15,13 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # Modify connections
-PUBLIC = False
+PUBLIC = True
 
 if PUBLIC:
     with open("connections_INTERNAL.py", "r") as f:
         code = f.read()
     with open("connections.py", "w") as f:
         f.write(re.sub("#####REMOVE#####[\s\S]+?#####REMOVE#####","",code))
-    with open("connections.py", "w") as f:
-        json.dump({"history": [], "reduced_history": [], "keywords": {}, "long_term_memory": ""}, f)
     shutil.rmtree("database", ignore_errors=True)
     os.mkdir("database")
 else:
