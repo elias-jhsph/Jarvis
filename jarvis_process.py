@@ -7,8 +7,8 @@ import atexit
 
 from audio_player import play_audio_file, get_next_audio_frame, start_audio_stream, stop_audio_stream
 from audio_listener import prep_mic, listen_to_user, convert_to_text
-from connections import ConnectionKeyError, get_pico_key, get_pico_path, get_gcp_data, set_connection_ring
-from processor import processor, get_model_name
+from connections import ConnectionKeyError, get_pico_key, get_pico_wake_path, get_gcp_data
+from processor import processor, get_model_name, set_text_queue
 from text_speech import text_to_speech
 
 # Configure logging
@@ -32,18 +32,14 @@ def check_tts(path):
     return path
 
 
-def jarvis_process(jarvis_stop_event, queue, codes):
+def jarvis_process(jarvis_stop_event, jarvis_skip_event, queue, text_queue):
     """
     Main function to run the Jarvis voice assistant process.
     """
-    audio_stream = None
     try:
 
         global last_time
         global free_tts
-
-        set_connection_ring(codes)
-
 
         try:
             get_gcp_data()
@@ -54,7 +50,7 @@ def jarvis_process(jarvis_stop_event, queue, codes):
         try:
             free_wake = False
             handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
-                                        keyword_paths=[get_pico_path()])
+                                        keyword_paths=[get_pico_wake_path()])
             atexit.register(handle.delete)
         except ConnectionKeyError as e:
             free_wake = True
@@ -75,6 +71,21 @@ def jarvis_process(jarvis_stop_event, queue, codes):
                         break
                 return False
 
+        def graceful_skip_loop():
+            """
+            Gracefully skip the loop if the user requests it.
+            """
+            if jarvis_skip_event.is_set():
+                logger.info("Skipping...")
+                queue.put("standby")
+                play_audio_file("audio_files/tone_one.wav", blocking=True)
+                stop_audio_stream()
+                if not free_wake:
+                    start_audio_stream(handle.sample_rate, handle.frame_length)
+                return True
+            else:
+                return False
+
         play_audio_file("audio_files/tone_one.wav", blocking=False, delay=2)
 
         prep_mic()
@@ -85,6 +96,8 @@ def jarvis_process(jarvis_stop_event, queue, codes):
             logger.info("Listening for wake word...")
             detected = False
             while jarvis_stop_event.is_set() is False:
+                if jarvis_skip_event.is_set():
+                    jarvis_skip_event.clear()
                 if free_wake:
                     if pocketsphinx_wake_word_detection("Jarvis", jarvis_stop_event):
                         detected = True
@@ -98,34 +111,49 @@ def jarvis_process(jarvis_stop_event, queue, codes):
                     detected = False
                     stop_audio_stream()
                     try:
+                        if graceful_skip_loop():
+                            continue
                         logger.info("listening...")
                         queue.put("listening")
                         query_audio = listen_to_user()
+                        if graceful_skip_loop():
+                            continue
                         queue.put("processing")
                         gap = datetime.datetime.now() - last_time
                         last_time = datetime.datetime.now()
                         # if gap.seconds > 60 * 5:
                         #     play_audio_file(check_tts("audio_files/hmm.wav"))
-                        beeps_stop_event = play_audio_file("audio_files/beeps.wav", loops=7, blocking=False)
+                        beeps_stop_event = play_audio_file("audio_files/beeps.wav", loops=7, blocking=False,
+                                                           added_stop_event=jarvis_skip_event)
                         try:
                             logger.info("Recognizing...")
                             query = convert_to_text(query_audio)
+                            text_queue.put({"role": "user", "content": query})
+                            if graceful_skip_loop():
+                                continue
                             if not re.search('[a-zA-Z]', query):
                                 raise Exception("No text found in audio")
                             logger.info("Query: %s", query)
                             logger.info("Processing...")
-                            text = processor(query, beeps_stop_event)
+                            text = processor(query, beeps_stop_event, skip=jarvis_skip_event, text_queue=text_queue)
+                            if graceful_skip_loop():
+                                continue
                         except TypeError as e:
                             logger.error(e, exc_info=True)
-                            with open("processor_error.log", "w") as file:
+                            with open("logs/processor_error.log", "w") as file:
                                 file.write(str(e))
                             text = "I am so sorry, my circuits are all flustered, ask me again please."
                         logger.info("Text: %s", text)
+                        if graceful_skip_loop():
+                            continue
                         if beeps_stop_event.is_set() is False:
                             logger.info("Making audio response")
                             audio_path = text_to_speech(text, model=get_model_name())
                             beeps_stop_event.set()
-                            play_audio_file(audio_path)
+                            if graceful_skip_loop():
+                                continue
+                            text_queue.put({"role": "assistant", "content": text, "model": get_model_name()})
+                            play_audio_file(audio_path, added_stop_event=jarvis_skip_event)
                             os.remove(audio_path)
                             time.sleep(0.1)
                         logger.info("Adjusting mic...")
@@ -136,7 +164,7 @@ def jarvis_process(jarvis_stop_event, queue, codes):
                         logger.info("Listening for wake word...")
                     except Exception as e:
                         logger.error(e, exc_info=True)
-                        with open("inner_error.log", "w") as file:
+                        with open("logs/inner_error.log", "w") as file:
                             file.write(str(e))
                         stop_audio_stream()
                         play_audio_file(check_tts('audio_files/minor_error.wav'))
@@ -145,7 +173,7 @@ def jarvis_process(jarvis_stop_event, queue, codes):
             stop_audio_stream()
         except Exception as e:
             logger.error(e, exc_info=True)
-            with open("outer_error.log", "w") as file:
+            with open("logs/outer_error.log", "w") as file:
                 file.write(str(e))
             stop_audio_stream()
             play_audio_file(check_tts('audio_files/major_error.wav'))
@@ -166,7 +194,7 @@ def test_mic():
     logger.info("Testing mic...")
     try:
         handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
-                                    keyword_paths=[get_pico_path()])
+                                    keyword_paths=[get_pico_wake_path()])
         prep_mic()
         start_audio_stream(handle.sample_rate, handle.frame_length)
         time.sleep(1)
@@ -175,3 +203,5 @@ def test_mic():
     except ConnectionKeyError as e:
         logger.warning("Could not test mic because pico key is not set.")
     return
+
+

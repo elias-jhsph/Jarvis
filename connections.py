@@ -71,11 +71,18 @@ def get_openai_key():
     return openai_key
 
 
-def get_pico_path():
-    os_key = get_connection('os')
-    if os_key is None:
-        raise ConnectionKeyError('os')
-    return os.getcwd() + "/Jarvis_en_" + os_key + "_v2_1_0.ppn"
+def get_pico_wake_path():
+    path = get_connection('pico_wake')
+    if path is None:
+        raise ConnectionKeyError('pico_wake')
+    return path
+
+
+def get_pico_stop_path():
+    path = get_connection('pico_stop')
+    if path is None:
+        raise ConnectionKeyError('pico_stop')
+    return path
 
 
 def get_mj_key():
@@ -137,7 +144,7 @@ class ConnectionKeyInvalid(Exception):
 def is_valid_pico_key(pico_key):
     import pvporcupine
     handle = pvporcupine.create(access_key=get_pico_key(), keywords=['Jarvis'],
-                                keyword_paths=[get_pico_path()])
+                                keyword_paths=[get_pico_wake_path()])
     del handle
     return
 
@@ -164,11 +171,16 @@ def set_openai_key(openai_key):
     set_connection('openai', openai_key)
 
 
-def set_pico_path(pico_path):
-    if not os.path.exists(pico_path):
+def set_pico_wake_path(pico_path):
+    if not os.path.exists(pico_path) or not pico_path.endswith('.ppn'):
         raise ConnectionKeyInvalid('PICO Model file')
-    os_key = pico_path.split("Jarvis_en_")[-1].split("_v2_1_0.ppn")[0]
-    set_connection('os', os_key)
+    set_connection('pico_wake', pico_path)
+
+
+def set_pico_stop_path(pico_path):
+    if not os.path.exists(pico_path) or not pico_path.endswith('.ppn'):
+        raise ConnectionKeyInvalid('PICO Model file')
+    set_connection('pico_stop', pico_path)
 
 
 def set_mj_key_and_secret(mj_key, mj_secret):
@@ -239,13 +251,13 @@ def set_google_key_and_ck(google_key, google_cx):
 
 def find_setters_that_throw_errors():
     getters = [
-        'get_pico_key', 'get_openai_key', 'get_pico_path', 'get_mj_key', 'get_mj_secret',
-        'get_emails', 'get_user', 'get_gcp_data', 'get_google', 'get_google_cx'
+        'get_pico_key', 'get_openai_key', 'get_pico_wake_path', 'get_pico_stop_path', 'get_mj_key',
+        'get_mj_secret', 'get_emails', 'get_user', 'get_gcp_data', 'get_google', 'get_google_cx'
     ]
 
     setters = [
-        'set_pico_key', 'set_openai_key', 'set_pico_path', 'set_mj_key_and_secret', 'set_emails',
-        'set_user', 'set_gcp_data', 'set_google_key_and_ck'
+        'set_pico_key', 'set_openai_key', 'set_pico_wake_path', 'set_pico_stop_path',
+        'set_mj_key_and_secret', 'set_emails', 'set_user', 'set_gcp_data', 'set_google_key_and_ck'
     ]
 
     error_setters = []
@@ -261,6 +273,8 @@ def find_setters_that_throw_errors():
                 elif getter_name == "get_gcp_data":
                     eval(setter + f"({value}, data=True)")
                 else:
+                    if setter.find("pico") >= 0:
+                        print(setter, value)
                     eval(setter + f"({value!r})")
             except Exception as e:
                 error_setters.append(setter)

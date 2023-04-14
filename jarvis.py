@@ -9,6 +9,7 @@ from PyQt6.QtGui import QIcon, QAction
 import settings_menu
 import connections
 from jarvis_process import jarvis_process
+from jarvis_interrupter import stop_word_detection
 
 import logger_config
 
@@ -54,13 +55,19 @@ class JarvisApp(QApplication):
             "stop": "Stop Listening",
             "quit": "Quit",
             "break_message": "Stopped",
+            "interrupt": "Jarvis, Stop.",
         }
+        self.codes = connections.get_connection_ring()
 
         self.menu = QMenu()
 
         self.start_stop_action = QAction(self.config["start"], self)
         self.start_stop_action.triggered.connect(self.start_stop_listener)
         self.menu.addAction(self.start_stop_action)
+
+        self.interrupt_action = QAction(self.config["interrupt"], self)
+        self.interrupt_action.triggered.connect(self.interrupt_listener)
+        self.menu.addAction(self.interrupt_action)
 
         self.settings_action = QAction("Settings", self)
         self.settings_action.triggered.connect(self.settings_listener)
@@ -76,16 +83,20 @@ class JarvisApp(QApplication):
         self.strobe_speed = 1
         self.strobe_fast_speed = 0.5
         self.ps = None
+        self.ps_interrupter = None
         self.settings = None
         self._set_environment()
         self.message_queue = None
+        self.chat_queue = None
         self.process_status = None
         self.stop_event = multiprocessing.Event()
+        self.skip_event = multiprocessing.Event()
         self.icon_thread = None
+        self.chat_thread = None
         clean_up_files()
         atexit.register(self.cleanup)
         logger.info("Ready!")
-        self.icon = os.path.join(os.getcwd(), "icon.icns")
+        self.icon = "icons/icon.icns"
         self.tray_icon.setIcon(QIcon(self.icon))
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
@@ -102,6 +113,7 @@ class JarvisApp(QApplication):
 
     def on_settings_closed(self):
         self.settings = None
+        self.settings = connections.get_connection_ring()
 
     def _set_environment(self):
         """Sets the environment for the Jarvis process."""
@@ -115,29 +127,41 @@ class JarvisApp(QApplication):
         else:
             os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
 
+    def interrupt_listener(self):
+        """Interrupts the current process."""
+        logger.info("Interrupting process")
+        self.skip_event.set()
+
+    def chat_logger(self):
+        while self.chat_queue is not None:
+            if not self.chat_queue.empty():
+                message = self.chat_queue.get()
+                logger.info(f"QUEUE - {str(message)}")
+
     def flash_icon(self):
-        default_icon = os.path.join(os.getcwd(), "icons/icon.icns")
+        default_icon = "icons/icon.icns"
         while self.message_queue is not None:
             if not self.message_queue.empty():
                 self.process_status = self.message_queue.get()
 
             if self.process_status == "standby":
+                self.skip_event.clear()
                 if self.icon == default_icon:
-                    self.icon = os.path.join(os.getcwd(), "icons/listening.icns")  # Change to the second icon
+                    self.icon = "icons/listening.icns"  # Change to the second icon
                 else:
                     self.icon = default_icon  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "listening":
-                self.icon = os.path.join(os.getcwd(), "icons/listening.icns")  # Change back to the first icon
+                self.icon = "icons/listening.icns"  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "processing":
-                if self.icon == os.path.join(os.getcwd(), "icons/processing_middle.icns"):
-                    self.icon = os.path.join(os.getcwd(), "icons/processing_small.icns")
+                if self.icon == "icons/processing_middle.icns":
+                    self.icon = "icons/processing_small.icns"
                     # Change to the second icon
                 else:
-                    self.icon = os.path.join(os.getcwd(), "icons/processing_middle.icns")
+                    self.icon = "icons/processing_middle.icns"
                     # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
@@ -162,11 +186,18 @@ class JarvisApp(QApplication):
                 self.icon_thread = threading.Thread(target=self.flash_icon)
                 self.icon_thread.daemon = True
                 self.icon_thread.start()
+                self.chat_queue = multiprocessing.Queue()
+                self.chat_thread = threading.Thread(target=self.chat_logger)
+                self.chat_thread.daemon = True
+                self.chat_thread.start()
                 self.stop_event = multiprocessing.Event()
                 self.ps = multiprocessing.Process(target=jarvis_process,
-                                                  args=([self.stop_event, self.message_queue,
-                                                         connections.get_connection_ring()]))
+                                                  args=([self.stop_event, self.skip_event,
+                                                         self.message_queue, self.chat_queue]))
+                self.ps_interrupter = multiprocessing.Process(target=stop_word_detection,
+                                                  args=([self.stop_event, self.skip_event]))
                 self.ps.start()
+                self.ps_interrupter.start()
             self.start_stop_action.setText(self.config["stop"])
         else:
             self._safe_kill()
@@ -194,6 +225,14 @@ class JarvisApp(QApplication):
                     logger.info("Medium killed!")
             else:
                 logger.info("Safe killed!")
+            if self.ps_interrupter.is_alive():
+                self.ps_interrupter.terminate()
+                time.sleep(1)
+                if self.ps_interrupter.is_alive():
+                    self.ps_interrupter.kill()
+                    logger.info("Hard killed interrupter!")
+                else:
+                    logger.info("Medium killed interrupter!")
             self.message_queue = None
             self.process_status = None
 

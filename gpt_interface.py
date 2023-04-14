@@ -237,16 +237,16 @@ def generate_response(query, query_history_role="user", query_role="user"):
     log_model(model["name"])
     if reason != "stop":
         if reason == "length":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model["name"])
             return output + "... I'm sorry, I have been going on and on haven't I?"
         if reason == "null":
             history_access.reset_add()
             return "I'm so sorry I got overwhelmed, can you put that more simply?"
         if reason == "content_filter":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model["name"])
             output = "I am so sorry, but if I responded to that I would have been forced to say something naughty."
     else:
-        history_access.add_assistant_response(output)
+        history_access.add_assistant_response(output, model["name"])
     schedule_refresh_assistant()
     return output
 
@@ -331,7 +331,7 @@ def stream_response(query, query_history_role="user", query_role="user"):
         )
 
 
-def resolve_stream_response(output, reason):
+def resolve_stream_response(output, reason, model):
     """
     stream a response to the given query.
 
@@ -339,19 +339,23 @@ def resolve_stream_response(output, reason):
     :type output: str
     :param reason: The reason the response was ended.
     :type reason: str
+    :param model: The model used to generate the response.
+    :type model: str
+    :return: The AI Assistant's response.
+    :rtype: str
     """
     if reason != "stop":
         if reason == "length":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model)
             return output
         if reason == "null":
             history_access.reset_add()
             return output
         if reason == "content_filter":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model)
             return output
     else:
-        history_access.add_assistant_response(output)
+        history_access.add_assistant_response(output, model)
     schedule_refresh_assistant()
     return output
 
@@ -375,6 +379,16 @@ def get_last_response():
     :rtype: tuple
     """
     return history_access.get_history()[-1]
+
+
+def get_chat_db():
+    """
+    Get the chat database.
+
+    :return: The chat database.
+    :rtype: collection
+    """
+    return history_access
 
 
 def safe_wait():

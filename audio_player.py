@@ -54,7 +54,7 @@ pa = pyaudio.PyAudio()
 audio_stream = None
 
 
-def play_audio_file(file_path, blocking=True, loops=1, delay=0, destroy=False):
+def play_audio_file(file_path, blocking=True, loops=1, delay=0, destroy=False, added_stop_event=None):
     """
     Play an audio file using pyaudio.
 
@@ -63,22 +63,23 @@ def play_audio_file(file_path, blocking=True, loops=1, delay=0, destroy=False):
     :param loops: int, the number of times to loop the audio file (default: 1)
     :param delay: float, the delay in seconds before starting playback (default: 0)
     :param destroy: bool, whether to destroy the file after playback (default: False)
+    :param added_stop_event: threading.Event, an event to signal stopping the playback (only for non-blocking mode)
     :return: threading.Event, an event to signal stopping the playback (only for non-blocking mode)
     """
     stop_event = threading.Event()
 
     if blocking:
         time.sleep(delay)
-        _play_audio_file_blocking(file_path, stop_event, loops, 0, destroy)
+        _play_audio_file_blocking(file_path, stop_event, loops, 0, destroy, added_stop_event)
     else:
         playback_thread = threading.Thread(target=_play_audio_file_blocking,
-                                           args=(file_path, stop_event, loops, delay, destroy))
+                                           args=(file_path, stop_event, loops, delay, destroy, added_stop_event))
         playback_thread.start()
 
     return stop_event
 
 
-def _play_audio_file_blocking(file_path, stop_event, loops, delay, destroy):
+def _play_audio_file_blocking(file_path, stop_event, loops, delay, destroy, added_stop_event):
     """
     Play an audio file using pyaudio, blocking the calling thread until playback is complete or stopped.
 
@@ -87,27 +88,33 @@ def _play_audio_file_blocking(file_path, stop_event, loops, delay, destroy):
     :param loops: int, the number of times to loop the audio file
     :param delay: float, the delay in seconds before starting playback
     :param destroy: bool, whether to destroy the file after playback
+    :param added_stop_event: threading.Event, an event to signal stopping the playback
 
     """
     global pa
     global audio_stream
+    stream = None
     if isinstance(file_path, list):
         if isinstance(loops, list) and isinstance(destroy, list):
             for i, file in enumerate(file_path):
-                _play_audio_file_blocking(file, stop_event, loops[i], delay, destroy[i])
+                _play_audio_file_blocking(file, stop_event, loops[i], delay, destroy[i], added_stop_event)
         elif isinstance(loops, list):
             for i, file in enumerate(file_path):
-                _play_audio_file_blocking(file, stop_event, loops[i], delay, destroy)
+                _play_audio_file_blocking(file, stop_event, loops[i], delay, destroy, added_stop_event)
         else:
             for file in file_path:
-                _play_audio_file_blocking(file, stop_event, loops, delay, destroy)
+                _play_audio_file_blocking(file, stop_event, loops, delay, destroy, added_stop_event)
         return
     else:
         chunk = 8196
         if audio_stream is not None:
             logger.warning("Audio stream already exists, closing it...")
             stop_audio_stream()
-        if not stop_event.is_set():
+        added_stop = False
+        if added_stop_event is not None:
+            if added_stop_event.is_set():
+                added_stop = True
+        if not stop_event.is_set() and not added_stop:
             time.sleep(delay)
             for loop in range(loops):
                 with wave.open(file_path, 'rb') as wf:
@@ -119,17 +126,21 @@ def _play_audio_file_blocking(file_path, stop_event, loops, delay, destroy):
 
                     data = wf.readframes(chunk)
                     while data:
-                        if not stop_event.is_set():
+                        if added_stop_event is not None:
+                            if added_stop_event.is_set():
+                                added_stop = True
+                        if not stop_event.is_set() and not added_stop:
                             stream.write(data)
                             data = wf.readframes(chunk)
                         else:
                             data = fade_out(data, 400)  # Adjust fade_duration for a very short fade-out
                             stream.write(data)
                             break
-        try:
-            stream.stop_stream()
-        finally:
-            stream.close()
+        if stream is not None:
+            try:
+                stream.stop_stream()
+            finally:
+                stream.close()
         if destroy:
             os.remove(file_path)
 

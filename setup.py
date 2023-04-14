@@ -24,6 +24,12 @@ if PUBLIC:
         f.write(re.sub("#####REMOVE#####[\s\S]+?#####REMOVE#####","",code))
     shutil.rmtree("database", ignore_errors=True)
     os.mkdir("database")
+    if not os.path.exists("pico_models_PRIVATE"):
+        os.mkdir("pico_models_PRIVATE")
+    for file in os.listdir("pico_models"):
+        shutil.copyfile(os.path.join("pico_models", file), os.path.join("pico_models_PRIVATE", file))
+    shutil.rmtree("pico_models", ignore_errors=True)
+    os.mkdir("pico_models")
 else:
     import EXCLUDE
     with open("connections_INTERNAL.py", "r") as f:
@@ -201,3 +207,7 @@ setup(
     setup_requires=['py2app'],
     install_requires=['tiktoken']
 )
+
+if PUBLIC:
+    for file in os.listdir("pico_models_PRIVATE"):
+        shutil.copyfile(os.path.join("pico_models_PRIVATE", file), os.path.join("pico_models", file))

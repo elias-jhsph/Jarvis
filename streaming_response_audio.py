@@ -18,22 +18,26 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
 
+rt_text_queue_global = None
+
 
 class SpeechStreamer:
-    def __init__(self, stop_other_audio=None):
+    def __init__(self, stop_other_audio=None, skip=None, rt_queue=None):
         self.queue = queue.Queue()
+        self.rt_queue = rt_queue
         self.playing = False
-        self.thread = threading.Thread(target=self._play_audio, args=(stop_other_audio,))
+        self.thread = threading.Thread(target=self._play_audio, args=(stop_other_audio, skip))
         self.thread.daemon = True
         self.thread.start()
         self.stream = None
         self.py_audio = pyaudio.PyAudio()
         self.stop_event = threading.Event()
+        self.skip = skip
         self.audio_count = 0
         self.lock = threading.Lock()
         self.done = False
 
-    def _play_audio(self, stop_other_audio=None):
+    def _play_audio(self, stop_other_audio=None, skip=None):
         while True:
             generator, sample_rate = self.queue.get()
             if generator is None:
@@ -52,6 +56,10 @@ class SpeechStreamer:
                                                      frames_per_buffer=CHUNK)
             chunk_played = False
             for chunk in generator:
+                if skip:
+                    if skip.is_set():
+                        self.stop()
+                        return
                 self.stream.write(chunk)
                 chunk_played = True
 
@@ -71,19 +79,23 @@ class SpeechStreamer:
         with self.lock:
             self.audio_count += 1
         #print(f"Queued text: {text}, audio count: {self.audio_count}")
-        tts_thread = threading.Thread(target=self._process_text_to_speech, args=(text, delay, model,))
+        tts_thread = threading.Thread(target=self._process_text_to_speech, args=(text, delay, model, self.rt_queue))
         tts_thread.daemon = True
         tts_thread.start()
 
     def stop(self):
         self.done = True
-        self.stop_event.wait()
+        if self.skip is None:
+            self.stop_event.wait()
+        else:
+            while self.stop_event.is_set() is False and self.skip.is_set() is False:
+                self.skip.wait(timeout=1)
         if self.stream:
             self.stream.stop_stream()
             self.stream.close()
         self.py_audio.terminate()
 
-    def _process_text_to_speech(self, text, delay, model):
+    def _process_text_to_speech(self, text, delay, model, rt_text):
         try:
             byte_data = text_to_speech(text, stream=True, model=model)
         except TextToSpeechError as e:
@@ -102,18 +114,22 @@ class SpeechStreamer:
         def generator():
             for i in range(0, len(np_audio_data), CHUNK):
                 yield np_audio_data[i:i + CHUNK].tobytes()
-
+        rt_text.put({"role": "assistant", "content": text, "model": model})
         self.queue.put((generator(), frame_rate))
 
 
-def stream_audio_response(streaming_text, stop_audio_event=None):
-    speech_stream = SpeechStreamer(stop_other_audio=stop_audio_event)
+def stream_audio_response(streaming_text, stop_audio_event=None, skip=None):
+    global rt_text_queue_global
+    speech_stream = SpeechStreamer(stop_other_audio=stop_audio_event, skip=skip, rt_queue=rt_text_queue_global)
     buffer = ""
     output = ""
     resp = None
     delay = 0.5
     model = None
     for resp in streaming_text:
+        if skip:
+            if skip.is_set():
+                break
         if "choices" in resp:
             if model is None:
                 model = resp['model']
@@ -147,6 +163,9 @@ def stream_audio_response(streaming_text, stop_audio_event=None):
 
                     # Keep the last part (which may be an incomplete sentence) in the buffer
                     buffer = merged_sentences[-1]
+    if skip:
+        if skip.is_set():
+            return "Sorry.", "null"
     if resp:
         reason = resp["choices"][0]["finish_reason"]
     else:
@@ -165,3 +184,10 @@ def stream_audio_response(streaming_text, stop_audio_event=None):
     speech_stream.stop()
     return output, reason
 
+
+def set_rt_text_queue(rt_text_queue):
+    """
+    Set the global rt_text_queue_global variable to the given rt_text_queue
+    """
+    global rt_text_queue_global
+    rt_text_queue_global = rt_text_queue

@@ -56,10 +56,16 @@ class AssistantHistory:
     :type persist_directory: str
     :param chroma_db_impl: The database implementation to use.
     :type chroma_db_impl: str
+    :param model_injection: Whether to inject the model name into the history.
+    :type model_injection: bool
+    :param time_injection: Whether to inject the time into the history.
+    :type time_injection: bool
     """
 
     def __init__(self, username, system, tokenizer, summarizer, max_tokens, embedder=None, persist_directory="database",
-                 chroma_db_impl="duckdb+parquet"):
+                 chroma_db_impl="duckdb+parquet", model_injection=True, time_injection=True):
+        self.model_injection = model_injection
+        self.time_injection = time_injection
         self.persist_directory = persist_directory
         self.chroma_db_impl = chroma_db_impl
         self.client = chromadb.Client(Settings(chroma_db_impl=chroma_db_impl,
@@ -175,20 +181,28 @@ class AssistantHistory:
         :type role: str
         """
         time_str, utc_time = get_time()
-        self.current_user_query = {"role": role, "content":  time_str + query, "utc_time": utc_time}
+        if self.time_injection:
+            query = time_str + query
+        self.current_user_query = {"role": role, "content":  query, "utc_time": utc_time}
 
-    def add_assistant_response(self, response):
+    def add_assistant_response(self, response, model):
         """
         Add an assistant response to the conversation history.
 
         :param response: The assistant response to be added.
         :type response: str
+        :param model: The model that generated the response.
+        :type model: str
         """
         if self.current_user_query is None:
             raise ValueError("No user query found. Add a user query before adding an assistant response.")
         time_str, utc_time = get_time()
         self.current_user_query['id'] = self.create_chat_id()
-        assistant_response = {"role": "assistant", "content": time_str + response,
+        if self.time_injection:
+            response = time_str + response
+        if self.model_injection:
+            response = "Source AI Model: " + model + " - " + response
+        assistant_response = {"role": "assistant", "content": response,
                               "id": self.create_chat_id(), "utc_time": utc_time,
                               "pair_id": self.current_user_query['id']}
         self.current_user_query['pair_id'] = assistant_response['id']
@@ -199,6 +213,7 @@ class AssistantHistory:
         assistant_response_metadata = {"role": assistant_response['role'],
                                        "pair_id": assistant_response['pair_id'],
                                        "utc_time": assistant_response['utc_time'],
+                                       "model": model,
                                        "num_tokens": self.count_tokens_text(assistant_response['content'])}
         self.history.add(
             embeddings=[self.embedder(self.current_user_query['content']),
@@ -390,7 +405,6 @@ class AssistantHistory:
 
         return [self.get_system()] + context_list
 
-
     def get_history(self):
         """
         Returns the history of the chat assistant
@@ -399,3 +413,22 @@ class AssistantHistory:
         :rtype: list
         """
         return self.history
+
+    def get_history_from_id_and_earlier(self, id=None, n_results=10):
+        """
+        Returns the history of the chat assistant from a given id and earlier
+
+        :param id: The id to start from
+        :type id: int
+        :param n_results: The number of results to return
+        :type n_results: int
+        :return: The history
+        :rtype: list
+        """
+        if id is None:
+            id = self.next_id-1
+        else:
+            id = int(id)
+        target_ids = list(range(id, id-n_results, -1))
+        target_ids = [str(x) for x in target_ids if x > 0]
+        return self.history.get(target_ids, include=['documents', 'metadatas'])
