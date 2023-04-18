@@ -1,16 +1,19 @@
 import sys
 import pyaudio
 import numpy as np
-from PyQt6.QtCore import Qt, QTimer, QPoint
-from PyQt6.QtGui import QRegion, QColor, QPainter, QBrush, QPixmap
-from PyQt6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtGui import QRegion, QColor, QPainter, QBrush, QPixmap
+from PySide6.QtWidgets import QApplication, QWidget
 import time
 
 
 class JarvisWaveform(QWidget):
-    def __init__(self):
+    def __init__(self, parent=None):
         super().__init__()
-        self.setWindowTitle("Siri-like Icon Animation")
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setWindowTitle("Jarvis Icon Animation")
         self.resize(120, 120)
 
         self.icon_path = "icons/icon.png"
@@ -30,6 +33,10 @@ class JarvisWaveform(QWidget):
         self.timer.start(20)
 
         self.start_time = time.time()
+        self.setStyleSheet("""
+                    border: none;
+                    background-color: white;
+                """)
 
     def init_audio_stream(self):
         self.p = pyaudio.PyAudio()
@@ -44,10 +51,10 @@ class JarvisWaveform(QWidget):
     def draw_icon(self, painter, icon, opacity):
         max_amplitude = np.abs(self.audio_data).max() / 32768
         scaling_factor = 0.80 + max_amplitude * 0.2
-        icon_width = int(self.width() * 0.97)
-        icon_height = int(self.height() * 0.97)
+        icon_width = int(self.width() * 0.01)
+        icon_height = int(self.height() * 0.01)
         scaled_icon = icon.scaled(icon_width, icon_height,
-                                  Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                                  Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
         scaled_width = int(scaled_icon.width() * scaling_factor)
         scaled_height = int(scaled_icon.height() * scaling_factor)
@@ -56,7 +63,7 @@ class JarvisWaveform(QWidget):
 
         painter.save()
         painter.setOpacity(opacity)
-        painter.drawPixmap(QPoint(x, y), scaled_icon.scaled(scaled_width, scaled_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        painter.drawPixmap(QPoint(x, y), scaled_icon.scaled(scaled_width, scaled_height, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         painter.restore()
 
     def calculate_average_color(self, pixmap):
@@ -84,8 +91,7 @@ class JarvisWaveform(QWidget):
             color = QColor.fromHsl(
                 (base_color.hue() + 20 * i) % 360,
                 min(base_color.saturation() + 30 * i, 255),
-                max(base_color.lightness() - 20 * i, 0),
-            )
+                max(base_color.lightness() - 20 * i, 0),)
             self.base_wave_colors.append(color)
 
     def create_icon_region(self, pixmap, transparency_threshold=100):
@@ -104,10 +110,9 @@ class JarvisWaveform(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Draw background
-        painter.setBrush(QBrush(QColor(30, 30, 30)))
+        painter.setBrush(QBrush(QColor("white")))
         painter.drawRect(self.rect())
 
         # Draw the previous icon
@@ -116,6 +121,9 @@ class JarvisWaveform(QWidget):
 
         # Draw the current icon
         self.draw_icon(painter, self.icon, 1 - self.prev_icon_opacity)
+
+        if painter.isActive():
+            painter.setRenderHint(QPainter.Antialiasing)
 
         # Draw the waveform
         icon_width = self.icon.width()
@@ -127,7 +135,7 @@ class JarvisWaveform(QWidget):
 
         max_height = self.height() // 2
         width = self.width()
-        num_waves = 7
+        num_waves = 5
         max_amplitude = np.abs(self.audio_data).max() / 32768
 
         current_time = time.time() - self.start_time
@@ -149,7 +157,7 @@ class JarvisWaveform(QWidget):
                 y = int(amplitude * np.sin(frequency * x + phase_shift) * max_height * scaling_factor)
 
                 # Add vertical offset to each wave
-                vertical_offset = int((np.sin(current_time + i * np.pi / num_waves) * max_height * 0.1)-0.25)
+                vertical_offset = int((np.sin(current_time + i * np.pi / num_waves) * max_height * 0.1) - 0.25)
 
                 # Add curvature to the wave lines
                 curvature_offset = int(np.sin(x * (1 + i) / 100) * max_height * 0.05)
@@ -165,7 +173,6 @@ class JarvisWaveform(QWidget):
 
         average_color = self.calculate_average_color(self.icon)
         self.update_base_wave_colors(average_color)
-
         fade_duration = 1000  # Fade duration in milliseconds
         fade_steps = 20
         fade_interval = fade_duration // fade_steps
@@ -193,7 +200,7 @@ if __name__ == "__main__":
     main_widget.show()
 
     # Demonstrate the dynamic icon update after 5 seconds
-    QTimer.singleShot(5000, lambda: main_widget.update_icon_path("icons/listening.png"))
-
+    QTimer.singleShot(2000, lambda: main_widget.update_icon_path("icons/listening.png"))
+    QTimer.singleShot(4000, lambda: main_widget.update_icon_path("icons/icon.png"))
     sys.exit(app.exec())
 

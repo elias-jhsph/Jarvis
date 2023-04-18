@@ -30,6 +30,10 @@ if PUBLIC:
         shutil.copyfile(os.path.join("pico_models", file), os.path.join("pico_models_PRIVATE", file))
     shutil.rmtree("pico_models", ignore_errors=True)
     os.mkdir("pico_models")
+    if not os.path.exists("database"):
+        os.mkdir("database")
+    if not os.path.exists("logs"):
+        os.mkdir("logs")
 else:
     import EXCLUDE
     with open("connections_INTERNAL.py", "r") as f:
@@ -38,6 +42,8 @@ else:
         f.write(code)
     if not os.path.exists("database"):
         os.mkdir("database")
+    if not os.path.exists("logs"):
+        os.mkdir("logs")
 
 sys.setrecursionlimit(2000)
 

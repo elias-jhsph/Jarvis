@@ -1,9 +1,9 @@
 from connections import *
 import sys
-from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, \
+from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, \
     QFileDialog, QInputDialog, QListWidget, QMessageBox, QListWidgetItem
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 
 
 class SettingsDialog(QDialog):
@@ -52,7 +52,6 @@ class SettingsDialog(QDialog):
         # Set initial button colors
         self.update_item_colors()
 
-
     def update_item_colors(self):
         error_setters = find_setters_that_throw_errors()
 
@@ -100,17 +99,17 @@ class SettingsDialog(QDialog):
     def handle_click(self, item):
         choice = item.text()
 
-        # Define the function name mapping
+        # Define the function name
         function_mapping = {
             'Set User': set_user,
             'Set Emails': set_emails,
             'Set OpenAI API Key': set_openai_key,
-            'Set Mailjet Key and Secret (Recommended)': set_mj_key_and_secret,
+            'Set Mailjet Key and Secret (Optional)': set_mj_key_and_secret,
             'Set Pico API Key (Optional)': set_pico_key,
             'Set Pico Path to wake word .ppn (Optional)': set_pico_wake_path,
             'Set Pico Path to stop word .ppn (Optional)': set_pico_stop_path,
             'Set Google Key and CX (Optional)': set_google_key_and_ck,
-            'Set GCP JSON Path (Optional)': set_gcp_data
+            'Set GCP JSON Path (Recommended)': set_gcp_data
         }
 
         try:
@@ -118,7 +117,7 @@ class SettingsDialog(QDialog):
                 path, _ = QFileDialog.getOpenFileName()
                 if path:
                     function_mapping[choice](path)
-            elif choice == 'Set Mailjet Key and Secret (Recommended)':
+            elif choice == 'Set Mailjet Key and Secret (Optional)':
                 value_key, ok_key = QInputDialog.getText(self, "Enter your Mailjet Key:", "")
                 value_secret, ok_secret = QInputDialog.getText(self, "Enter your Mailjet Secret:", "")
                 if ok_key and ok_secret:
@@ -149,10 +148,9 @@ class SettingsDialog(QDialog):
 
 def main():
     app = QApplication.instance()
+
     if app is None:
         app = QApplication(sys.argv)
-
-    app.setStyle("Fusion")
 
     # Set up the dark theme
     palette = app.palette()
@@ -177,3 +175,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

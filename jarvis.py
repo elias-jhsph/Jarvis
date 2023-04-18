@@ -4,8 +4,8 @@ import time
 import threading
 import multiprocessing
 import atexit
-from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PyQt6.QtGui import QIcon, QAction
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PySide6.QtGui import QIcon, QAction
 import settings_menu
 import connections
 from jarvis_process import jarvis_process
@@ -48,7 +48,7 @@ def clean_up_files():
 class JarvisApp(QApplication):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        logger.info("CWD "+os.getcwd())
+        logger.info("CWD " + os.getcwd())
         self.config = {
             "app_name": "Jarvis",
             "start": "Start Listening",
@@ -143,7 +143,6 @@ class JarvisApp(QApplication):
         while self.message_queue is not None:
             if not self.message_queue.empty():
                 self.process_status = self.message_queue.get()
-
             if self.process_status == "standby":
                 self.skip_event.clear()
                 if self.icon == default_icon:
@@ -195,13 +194,13 @@ class JarvisApp(QApplication):
                                                   args=([self.stop_event, self.skip_event,
                                                          self.message_queue, self.chat_queue]))
                 self.ps_interrupter = multiprocessing.Process(target=stop_word_detection,
-                                                  args=([self.stop_event, self.skip_event]))
+                                                              args=([self.stop_event, self.skip_event]))
                 self.ps.start()
                 self.ps_interrupter.start()
-            self.start_stop_action.setText(self.config["stop"])
-        else:
-            self._safe_kill()
-            self.start_stop_action.setText(self.config["start"])
+                self.start_stop_action.setText(self.config["stop"])
+            else:
+                self._safe_kill()
+                self.start_stop_action.setText(self.config["start"])
 
     def quit_listener(self):
         """Quits the application."""

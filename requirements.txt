@@ -15,7 +15,7 @@ pipdeptree
 spacy
 beautifulsoup4
 keyring
-PyQt6
+PySide6
 scikit-learn
 dmgbuild
 gtts

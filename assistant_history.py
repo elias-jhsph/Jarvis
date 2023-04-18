@@ -431,4 +431,13 @@ class AssistantHistory:
             id = int(id)
         target_ids = list(range(id, id-n_results, -1))
         target_ids = [str(x) for x in target_ids if x > 0]
-        return self.history.get(target_ids, include=['documents', 'metadatas'])
+        output = []
+        results = self.history.get(target_ids, include=['documents', 'metadatas'])
+        for tid in target_ids:
+            if tid in results["ids"]:
+                pos = results["ids"].index(tid)
+                entry = results["metadatas"][pos]
+                entry["content"] = results["documents"][pos]
+                entry["id"] = tid
+                output.append(entry)
+        return output

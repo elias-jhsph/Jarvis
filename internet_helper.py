@@ -146,7 +146,7 @@ def truncate_content(content, max_tokens=3500):
         return content
 
 
-def search_helper(query, result_number=6):
+def search_helper(query, result_number=6, skip=None):
     search_data = {"initial_query": query, "refined_query": refine_query(query), "search_results": [],
                    "ranked_summaries": [], "synthesized_information": None}
 
@@ -157,16 +157,26 @@ def search_helper(query, result_number=6):
     search_data["search_results"] = temp['items']
 
     for result in search_data["search_results"]:
+        if skip is not None:
+            if skip.is_set():
+                return {}
         content = extract_content(result['link'])
         summary = summarize(truncate_content(content))
         snippet = result.get('snippet', '')  # Use an empty string if snippet is not available
         search_data["ranked_summaries"].append({"url": result['link'], "content": content, "summary": summary, "snippet": snippet})
 
     for summary_data in search_data["ranked_summaries"]:
+        if skip is not None:
+            if skip.is_set():
+                return {}
         relevance = rank_relevance(summary_data["url"], summary_data["summary"], search_data["refined_query"])
         summary_data["relevance"] = relevance
 
     search_data["ranked_summaries"].sort(key=lambda x: x["relevance"], reverse=True)
+
+    if skip is not None:
+        if skip.is_set():
+            return {}
 
     search_data["synthesized_information"] = synthesize_information(
         [(data["url"], data["summary"]) for data in search_data["ranked_summaries"]],
@@ -242,7 +252,16 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
     return prompt
 
 
-def create_internet_context(query, result_number=10, max_tokens=1800):
-    search_data = search_helper(query, result_number=result_number)
+def create_internet_context(query, result_number=10, max_tokens=1800, skip=None):
+    if skip is not None:
+        if skip.is_set():
+            return "", {}
+    search_data = search_helper(query, result_number=result_number, skip=skip)
+    if skip is not None:
+        if skip.is_set():
+            return "", {}
     simplified_output = simplify_output(search_data)
+    if skip is not None:
+        if skip.is_set():
+            return "", {}
     return generate_final_prompt(simplified_output, max_tokens=max_tokens), simplified_output

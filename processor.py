@@ -151,7 +151,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                     return "I'm so sorry I didn't catch that. I think I cut you off."
                 file = text_to_speech("Emailing you the following reminder: " + reminder)
                 stop_audio_event.set()
-                play_audio_file(file, blocking=True, destroy=True, stop_event=skip)
+                play_audio_file(file, blocking=True, destroy=True, add_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 output = email_processor("Jarvis reminder: " + reminder[:200]+"...", reminder)
@@ -160,7 +160,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                 file = text_to_speech(output, model=get_model()['name'])
                 if skip.is_set():
                     return "Sorry."
-                play_audio_file(file, blocking=True, destroy=True, stop_event=skip)
+                play_audio_file(file, blocking=True, destroy=True, add_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 return output
@@ -172,7 +172,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                 file = text_to_speech('Searching the internet for your query, "' + query +
                                       '". I will let you know when I am done working on that email.')
                 stop_audio_event.set()
-                play_audio_file(file, blocking=False, destroy=True, stop_event=skip)
+                play_audio_file(file, blocking=False, destroy=True, add_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 response, data = internet_processor(query, stream=False, skip=skip)
@@ -196,7 +196,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                     return "I'm so sorry I didn't catch that. I think I cut you off."
                 file = text_to_speech("Emailing you my response to: " + query)
                 stop_audio_event.set()
-                play_audio_file(file, blocking=False, destroy=True, stop_event=skip)
+                play_audio_file(file, blocking=False, destroy=True, add_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 output = email_processor("Jarvis responding to question: " + query, generate_response(query))
@@ -218,7 +218,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
             if skip.is_set():
                 return "Sorry."
             stop_flag = play_audio_file([file, "audio_files/searching.wav"], loops=[1, 7],
-                                        blocking=False, destroy=[True, False], stop_event=skip)
+                                        blocking=False, destroy=[True, False], added_stop_event=skip)
             if skip.is_set():
                 return "Sorry."
             response, data = internet_processor(query, stop_audio_event=stop_flag, skip=skip)
@@ -482,11 +482,5 @@ def get_chat_history(id=None, limit=10):
     :param limit: int, the maximum number of chat history entries to return
     :return: list, a list of chat history entries
     """
-    results = get_chat_db().get_history_from_id_and_earlier(id=id, n_results=limit)
-    output = []
-    for i, document in enumerate(results['documents']):
-        test = results["metadatas"][i].copy()
-        test["content"] = document
-        test["id"] = results["ids"][i]
-        output.append(test)
+    output = get_chat_db().get_history_from_id_and_earlier(id=id, n_results=limit)
     return output
