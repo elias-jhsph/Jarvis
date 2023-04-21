@@ -2,7 +2,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 
-
+# Set up a logger
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s [%(levelname)s] - %(message)s',
                     handlers=[logging.FileHandler("logs/jarvis_process.log"), logging.StreamHandler()])
@@ -15,5 +15,8 @@ logging.getLogger().addHandler(handler)
 def get_logger():
     """
     Sets up the jarvis_process.log
+
+    :return: The logger.
+    :rtype: logging.Logger
     """
     return logging.getLogger(__name__)

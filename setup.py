@@ -17,21 +17,29 @@ logger = logging.getLogger(__name__)
 # Modify connections
 PUBLIC = True
 
+# Check if we are packaging for the public or for internal use
 if PUBLIC:
+    # Remove the internal connections file
     with open("connections_INTERNAL.py", "r") as f:
         code = f.read()
     with open("connections.py", "w") as f:
-        f.write(re.sub("#####REMOVE#####[\s\S]+?#####REMOVE#####","",code))
+        f.write(re.sub("#####REMOVE#####[\s\S]+?#####REMOVE#####", "", code))
+
+    # Remove the private database
     shutil.rmtree("database", ignore_errors=True)
     os.mkdir("database")
+    if not os.path.exists("database"):
+        os.mkdir("database")
+
+    # Remove the private pico models
     if not os.path.exists("pico_models_PRIVATE"):
         os.mkdir("pico_models_PRIVATE")
     for file in os.listdir("pico_models"):
         shutil.copyfile(os.path.join("pico_models", file), os.path.join("pico_models_PRIVATE", file))
     shutil.rmtree("pico_models", ignore_errors=True)
     os.mkdir("pico_models")
-    if not os.path.exists("database"):
-        os.mkdir("database")
+
+    # Remove the private logs
     if not os.path.exists("logs"):
         os.mkdir("logs")
 else:
@@ -87,6 +95,7 @@ def parse_installed_packages(file):
 
     :param file: The file containing the installed packages.
     :return: A list of package names.
+    :rtype: list
     """
     with open(file, 'r') as f:
         return [line.strip() for line in f.readlines() if line.strip() != "pipdeptree"]
@@ -98,6 +107,7 @@ def get_dependency_tree(packages):
 
     :param packages: A list of package names.
     :return: The dependency tree as a JSON object.
+    :rtype: dict
     """
     command = ['pipdeptree', '--json', '--packages', ",".join(packages)]
     output = subprocess.run(command, capture_output=True)
@@ -110,6 +120,7 @@ def extract_import_names(dependency_tree):
 
     :param dependency_tree: The dependency tree as a JSON object.
     :return: A sorted list of import names.
+    :rtype: list
     """
     import_names = set()
     for entry in dependency_tree:
@@ -124,6 +135,7 @@ def find_packages_improved():
     Find packages to be included in the application bundle.
 
     :return: A list of packages to be included.
+    :rtype: list
     """
     packages = extract_import_names(get_dependency_tree(parse_installed_packages('requirements.txt')))+ADDED_PACKAGES
     found_packages = find_packages("venv/lib/python3.10/site-packages")
@@ -134,7 +146,7 @@ def find_packages_improved():
                 if PACKAGE_NAME_MAPPING[package] != "SKIP":
                     output.append(PACKAGE_NAME_MAPPING[package])
             else:
-                recover = re.sub("-","_",package)
+                recover = re.sub("-", "_", package)
                 if recover in found_packages:
                     output.append(recover)
                 else:
@@ -157,6 +169,7 @@ DATA_FILES = [
     'gpt_interface.py', 'text_speech.py', 'connections.py', 'logger_config.py', 'requirements.txt',
     'audio_listener.py', 'audio_player.py', 'icon.icns', 'processor.py', 'internet_helper.py',
     'assistant_history.py', 'logger_config.py', 'settings_menu.py', 'streaming_response_audio.py',
+    'animation.py', 'viewer_window.py', 'jarvis_interrupter.py', 'style.qss',
     ("audio_files", ['audio_files/beeps.wav', 'audio_files/booting.wav', 'audio_files/go_on.wav',
                      'audio_files/hmm.wav', 'audio_files/listening.wav', 'audio_files/major_error.wav',
                      'audio_files/mic_error.wav', 'audio_files/minor_error.wav',

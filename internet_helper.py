@@ -1,3 +1,5 @@
+import threading
+
 import requests
 from bs4 import BeautifulSoup
 import openai
@@ -28,7 +30,17 @@ except ConnectionKeyError:
     free = True
 
 
-def search(search_term, num_results=10):
+def search(search_term: str, num_results: int = 10) -> dict:
+    """
+    Searches for a term using either Google Custom Search API or a free alternative.
+
+    :param search_term: The term to search for.
+    :type search_term: str
+    :param num_results: The number of results to return, defaults to 10.
+    :type num_results: int, optional
+    :return: A dictionary containing the search results.
+    :rtype: dict
+    """
     if not free:
         return service.cse().list(q=search_term, cx="43f9ec6b2e16a410c", num=num_results).execute()
     else:
@@ -38,7 +50,18 @@ def search(search_term, num_results=10):
         return {"items": search_results}
 
 
-def refine_query(query):
+def refine_query(query: str) -> str:
+    """
+    Refines a query using the OpenAI API.
+
+    This function is used to refine a query to get better search results. It uses the OpenAI API to ask the user
+    for context and keywords to add to the query. The user's response is then sent directly to google.
+
+    :param query: The query to refine.
+    :type query: str
+    :return: The refined query.
+    :rtype: str
+    """
     response = openai.ChatCompletion.create(
         model=chat_model,
         messages=[{"role": "user", "content":
@@ -63,7 +86,15 @@ def refine_query(query):
     return refined_query
 
 
-def extract_content(url):
+def extract_content(url: str) -> str:
+    """
+    Extracts the content from a webpage using BeautifulSoup.
+
+    :param url: The URL of the webpage.
+    :type url: str
+    :return: The content of the webpage.
+    :rtype: str
+    """
     try:
         response = requests.get(url)
         soup = BeautifulSoup(response.text, "html.parser")
@@ -75,11 +106,22 @@ def extract_content(url):
         return ""
 
 
-def summarize(content):
+def summarize(content: str, refined_query: str) -> str:
+    """
+    Summarizes a piece of text using the OpenAI API.
+
+    :param content: The text to summarize.
+    :type content: str
+    :param refined_query: The refined query.
+    :type refined_query: str
+    :return: The summary.
+    :rtype: str
+    """
     response = openai.Completion.create(
         engine=base_model,
-        prompt=f"Please provide a concise summary of the following content:\n{content}\n",
-        max_tokens=150,
+        prompt=f'There was a search for the following query:\n"{refined_query}"\nPlease provide a concise summary of'
+               f' the following content while keeping mind what will best respond to the search query:\n{content}\n',
+        max_tokens=200,
         n=1,
         stop=None,
         temperature=0.8,
@@ -88,7 +130,18 @@ def summarize(content):
     return summary
 
 
-def rank_relevance(url, summary, query):
+def rank_relevance(url: str, summary: str, query: str) -> int:
+    """
+    Ranks the relevance of a summary using the OpenAI API.
+
+    :param url: The URL of the webpage.
+    :type url: str
+    :param summary: The summary.
+    :type summary: str
+    :param query: The query.
+    :type query: str
+    :return: The relevance of the summary.
+    """
     prompt = f"Given the query '{query}', rate the relevance of this summary from 1 (not relevant) to 10 (highly " \
              f"relevant):\nURL: {url}\nSummary: {summary}\nRelevance: "
     response = openai.Completion.create(
@@ -121,12 +174,20 @@ def rank_relevance(url, summary, query):
     return relevance
 
 
-def synthesize_information(summaries, query):
+def synthesize_information(summaries: list, query: str) -> str:
+    """
+    Synthesizes information from a list of summaries using the OpenAI API.
+
+    :param summaries: The list of summaries.
+    :type summaries: list
+    :param query: The query.
+    :type query: str
+    """
     summaries_text = "\n".join([f"Summary {i + 1}: {summary}" for i, (url, summary) in enumerate(summaries)])
     response = openai.ChatCompletion.create(
         model=chat_model,
-        messages=[{"role":"user", "content": f"Given the following summaries about '{query}', please "
-               f"synthesize a coherent and comprehensive response:\n{summaries_text}\n"}],
+        messages=[{"role": "user", "content": f"Given the following summaries about '{query}', please synthesize "
+                                              f"a coherent and comprehensive response:\n{summaries_text}\n"}],
         max_tokens=500,
         n=1,
         temperature=0.8,
@@ -135,7 +196,17 @@ def synthesize_information(summaries, query):
     return synthesized_info
 
 
-def truncate_content(content, max_tokens=3500):
+def truncate_content(content: str, max_tokens: int = 3400) -> str:
+    """
+    Truncates a piece of text to a maximum number of tokens.
+
+    :param content: The text to truncate.
+    :type content: str
+    :param max_tokens: The maximum number of tokens.
+    :type max_tokens: int
+    :return: The truncated text.
+    :rtype: str
+    """
     tokens = enc.encode(content)
 
     if len(tokens) > max_tokens:
@@ -146,7 +217,22 @@ def truncate_content(content, max_tokens=3500):
         return content
 
 
-def search_helper(query, result_number=6, skip=None):
+def search_helper(query: str, result_number: int = 6, skip: threading.Event = None) -> dict:
+    """
+    Helper function for search.
+
+    This function is used to run the search for a given query by first refining the query, then searching for the query,
+    then summarizing the results, then ranking the relevance of the summaries, and finally synthesizing the information
+
+    :param query: The query.
+    :type query: str
+    :param result_number: The number of results to return.
+    :type result_number: int
+    :param skip: A threading.Event object that can be used to stop the search.
+    :type skip: threading.Event
+    :return: A dictionary containing the search results.
+    :rtype: dict
+    """
     search_data = {"initial_query": query, "refined_query": refine_query(query), "search_results": [],
                    "ranked_summaries": [], "synthesized_information": None}
 
@@ -161,9 +247,10 @@ def search_helper(query, result_number=6, skip=None):
             if skip.is_set():
                 return {}
         content = extract_content(result['link'])
-        summary = summarize(truncate_content(content))
+        summary = summarize(truncate_content(content), search_data["refined_query"])
         snippet = result.get('snippet', '')  # Use an empty string if snippet is not available
-        search_data["ranked_summaries"].append({"url": result['link'], "content": content, "summary": summary, "snippet": snippet})
+        search_data["ranked_summaries"].append({"url": result['link'], "content": content,
+                                                "summary": summary, "snippet": snippet})
 
     for summary_data in search_data["ranked_summaries"]:
         if skip is not None:
@@ -186,14 +273,35 @@ def search_helper(query, result_number=6, skip=None):
     return search_data
 
 
-def simplify_output(search_data):
+def simplify_output(search_data: dict) -> dict:
+    """
+    Simplifies the output of the search function.
+
+    :param search_data: The output of the search function.
+    :type search_data: dict
+    :return: A simplified version of the output of the search function.
+    :rtype: dict
+    """
     simplified_output = {k: v for k, v in search_data.items() if k != "summaries"}
     for summary_data in simplified_output["ranked_summaries"]:
         summary_data.pop("content", None)
     return simplified_output
 
 
-def generate_final_prompt(simplified_output, max_tokens=1800):
+def generate_final_prompt(simplified_output: dict, max_tokens: int = 1800) -> str:
+    """
+    Generates the final prompt for the chatbot.
+
+    This function is used to generate the final prompt for the chatbot by combining the information from the search
+    function.
+
+    :param simplified_output: The simplified output of the search function.
+    :type simplified_output: dict
+    :param max_tokens: The maximum number of tokens.
+    :type max_tokens: int
+    :return: The final prompt for the chatbot.
+    :rtype: str
+    """
     synthesized_information = simplified_output["synthesized_information"]
     ranked_summaries = simplified_output["ranked_summaries"]
     refined_query = simplified_output["refined_query"]
@@ -252,7 +360,26 @@ def generate_final_prompt(simplified_output, max_tokens=1800):
     return prompt
 
 
-def create_internet_context(query, result_number=10, max_tokens=1800, skip=None):
+def create_internet_context(query: str, result_number: int = 10,
+                            max_tokens: int = 1800, skip: threading.Event = None) -> tuple:
+    """
+    Creates the internet context for the chatbot.
+
+    This function is used to create the internet context for the chatbot by combining the information from the search
+    function. Then it generates the final prompt for the chatbot. Then it returns the final prompt and the simplified
+    output of the search function.
+
+    :param query: The query to search for.
+    :type query: str
+    :param result_number: The number of results to return.
+    :type result_number: int
+    :param max_tokens: The maximum number of tokens.
+    :type max_tokens: int
+    :param skip: The skip object.
+    :type skip: Skip
+    :return: The final prompt for the chatbot and the simplified output of the search function.
+    :rtype: tuple
+    """
     if skip is not None:
         if skip.is_set():
             return "", {}

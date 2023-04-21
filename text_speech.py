@@ -26,7 +26,16 @@ except Exception as e:
 
 
 class TextToSpeechError(Exception):
+    """
+    Exception raised when the text to speech conversion fails.
+    """
     def __init__(self, sentence):
+        """
+        Initialise the exception.
+
+        :param sentence: str, The sentence that failed to be converted to speech.
+        :type sentence: str
+        """
         self.sentence = sentence
         super().__init__(f"The following sentence was too long to turn into voice '{self.sentence}'.")
 
@@ -36,9 +45,13 @@ def text_to_speech(text: str, stream=False, model="gpt-4"):
     Convert the given text to speech and save the result as an audio file.
 
     :param text: str, The text to be converted to speech.
+    :type text: str
     :param stream: bool, Whether to return the audio content as a stream or save it to a file.
+    :type stream: bool
     :param model: str, The model used to generate the text.
-    :return: str, The file path of the generated audio file.
+    :type model: str
+    :return: The file path of the generated audio file or the audio content as a stream.
+    :rtype: str or bytes
     """
     text = simplify_urls(re.sub("`", "", text))
 
@@ -96,8 +109,10 @@ def text_to_speech(text: str, stream=False, model="gpt-4"):
 def simplify_urls(text):
     """
     Simplify URLs in the given text by removing the protocol and "www." and anything after the domain name.
-    :param text:
-    :return:
+    :param text: The text to simplify URLs in.
+    :type text: str
+    :return: The modified text.
+    :rtype: str
     """
     # Regular expression to match URLs
     url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
@@ -122,8 +137,10 @@ def simplify_urls(text):
 def find_longest_sentence(text):
     """
     Find the longest sentence in the given text.
-    :param text:
-    :return:
+    :param text: The text to find the longest sentence in.
+    :type text: str
+    :return: The longest sentence.
+    :rtype: str
     """
     # Split the text into sentences using regex
     sentences = re.split(r' *[\.\?!][\'"\)\]]* *', text)
@@ -134,18 +151,19 @@ def find_longest_sentence(text):
     return longest_sentence
 
 
-def split_longest_sentence(text, max_length=200):
+def split_longest_sentence(text):
     """
     Split the longest sentence in the given text into smaller sentences.
-    :param text:
-    :param max_length:
-    :return:
+    :param text: The text to split the longest sentence in.
+    :type text: str
+    :return: The modified text.
+    :rtype: str
     """
     # Find the longest sentence
     longest_sentence = find_longest_sentence(text)
 
     # Split the longest sentence into chunks
-    chunks = split_sentence(longest_sentence, max_length)
+    chunks = split_sentence(longest_sentence)
 
     # Replace the longest sentence in the text with the smaller sentences
     new_longest_sentence = '. '.join(chunks)
@@ -159,7 +177,9 @@ def capitalize_first_letter(sentence: str) -> str:
     Capitalize the first letter of the given sentence.
 
     :param sentence: The sentence to capitalize the first letter.
+    :type sentence: str
     :return: The sentence with the first letter capitalized.
+    :rtype: str
     """
     if len(sentence) > 0:
         return sentence[0].upper() + sentence[1:]
@@ -171,7 +191,9 @@ def remove_trailing_comma(sentence: str) -> str:
     Remove trailing comma from the given sentence.
 
     :param sentence: The sentence to remove the trailing comma.
+    :type sentence: str
     :return: The sentence without the trailing comma.
+    :rtype: str
     """
     return sentence.rstrip(',')
 
@@ -182,6 +204,7 @@ def find_best_split(sentence: str) -> int:
 
     :param sentence: The input sentence to find the best split index.
     :return: The best split index or None if there are no delimiters.
+    :rtype: int or None
     """
     # Find the indices of all delimiters
     delimiter_indices = [m.start() for m in re.finditer(r'[:,;]', sentence)]
@@ -203,7 +226,9 @@ def split_sentence(sentence: str) -> list:
     Split the input sentence into two parts at the best delimiter.
 
     :param sentence: The input sentence to split.
+    :type sentence: str
     :return: A list of two sentences after splitting.
+    :rtype: list
     """
     best_split_index = find_best_split(sentence)
 
@@ -225,9 +250,13 @@ def free_text_to_speech(text: str, model="gpt-4", stream=False):
     Convert the given text to speech using the specified model.
 
     :param text: The text to convert to speech.
+    :type text: str
     :param model: The model to use for text-to-speech.
+    :type model: str
     :param stream: Whether to return the audio content as a stream.
+    :type stream: bool
     :return: The path to the audio file or the audio content as a stream.
+    :rtype: str or bytes
     """
     slow_flag = True
     if model.find("gpt-4") >= 0:

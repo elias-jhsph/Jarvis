@@ -30,7 +30,7 @@ models = {"primary": {"name": "gpt-4",
           "requests": [],
           "fall_back": {"name": "gpt-3.5-turbo-0301",
                         "max_message": 800,
-                        "max_history": 2800,
+                        "max_history": 2600,
                         "temperature": 0.8,
                         "top_p": 1,
                         "frequency_penalty": 0.19,
@@ -134,13 +134,18 @@ system = "You are FIXED_USER_INJECTION AI Voice Assistant named Jarvis. Keep in 
 
 
 # Load Assistant History
-history_access = AssistantHistory(get_user(), system, tokenizer, summarizer,
-                                  models["primary"]["max_history"], embedder=openai_embedder)
+history_access = AssistantHistory(get_user(), system, tokenizer, summarizer, models["primary"]["max_history"],
+                                  models["fall_back"]["max_history"], embedder=openai_embedder)
 
 
 def get_model(error=False):
     """
     Returns the model to use for the next query.
+
+    :param error: Whether or not the last query resulted in an error.
+    :type error: bool
+    :return: The model to use for the next query.
+    :rtype: dict
     """
     global models
     global history_access
@@ -159,6 +164,8 @@ def log_model(model):
     Logs the model used for the last query.
 
     :param model: The model used for the last query.
+    :type model: str
+    :return: None
     """
     global models
     if model == models["primary"]["name"]:
@@ -257,7 +264,8 @@ def generate_simple_response(history):
 
     :param history: The user's input query.
     :type history: list
-    :return: The AI Assistant's response.
+    :return: The AI Assistant's response and the reason for stopping.
+    :rtype: tuple
     """
     model = get_model()
     try:
@@ -299,7 +307,7 @@ def stream_response(query, query_history_role="user", query_role="user"):
     :param query_history_role: defaults to "user" but can be "assistant" or "system"
     :type query_history_role: str
     :return: The AI Assistant's response.
-    :rtype: str
+    :rtype: dict
     """
     safe_wait()
     history_access.add_user_query(query, role=query_history_role)
@@ -341,7 +349,7 @@ def resolve_stream_response(output, reason, model):
     :type reason: str
     :param model: The model used to generate the response.
     :type model: str
-    :return: The AI Assistant's response.
+    :return: The AI Assistant's text response.
     :rtype: str
     """
     if reason != "stop":
@@ -364,6 +372,8 @@ def schedule_refresh_assistant():
     """
     This function runs the refresh_history function in the background to prevent
     blocking the main thread while updating the conversation history.
+
+    :return: None
     """
     global executor, tasks, history_changed
     history_changed = True
@@ -375,10 +385,10 @@ def get_last_response():
     """
     Get the last response in the conversation history.
 
-    :return: A tuple containing the last user query and the last AI Assistant response.
-    :rtype: tuple
+    :return: A list containing the last user query and the last AI Assistant response.
+    :rtype: list
     """
-    return history_access.get_history()[-1]
+    return history_access.get_history_from_id_and_earlier(n_results=2)
 
 
 def get_chat_db():
@@ -394,6 +404,8 @@ def get_chat_db():
 def safe_wait():
     """
     Waits until all scheduled tasks are completed to run
+
+    :return: None
     """
     global tasks
     if tasks:
@@ -407,6 +419,8 @@ def safe_wait():
 def shutdown_executor():
     """
     Helps with grateful shutdown of executor in case of termination
+
+    :return: None
     """
     global executor
     if executor is not None:

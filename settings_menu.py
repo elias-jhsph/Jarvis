@@ -7,6 +7,10 @@ from PySide6.QtGui import QColor
 
 
 class SettingsDialog(QDialog):
+    """
+    A custom QDialog for displaying and handling settings.
+    """
+
     def __init__(self):
         super().__init__()
 
@@ -52,7 +56,10 @@ class SettingsDialog(QDialog):
         # Set initial button colors
         self.update_item_colors()
 
-    def update_item_colors(self):
+    def update_item_colors(self) -> None:
+        """
+        Update the colors of the items in the list widget based on whether they throw errors or not.
+        """
         error_setters = find_setters_that_throw_errors()
 
         function_mapping = {
@@ -79,7 +86,10 @@ class SettingsDialog(QDialog):
 
             item.setForeground(QColor(button_color))
 
-    def set_list_widget_style(self):
+    def set_list_widget_style(self) -> None:
+        """
+        Set the style of the list widget.
+        """
         self.list_widget.setStyleSheet("""
             QListWidget::item {
                 border: none;
@@ -91,12 +101,18 @@ class SettingsDialog(QDialog):
                 color: #ffffff;
             }
             QListWidget::item:selected {
-                background-color: gray;
-                color: #ffffff;
+            background-color: gray;
+            color: #ffffff;
             }
-        """)
+            """)
 
-    def handle_click(self, item):
+    def handle_click(self, item: QListWidgetItem) -> None:
+        """
+        Handle click events for the list widget items.
+
+        :param item: The clicked item in the list widget.
+        :type item: QListWidgetItem
+        """
         choice = item.text()
 
         # Define the function name
@@ -145,34 +161,23 @@ class SettingsDialog(QDialog):
         except Exception as e:
             QMessageBox.warning(self, "Invalid Input", f"The value was invalid and not updated.\nError: {str(e)}")
 
+    def closeEvent(self, event) -> None:
+        """
+        Override the close event to hide the dialog instead of closing it.
 
-def main():
+        :param event: The close event.
+        :type event: QCloseEvent
+        """
+        event.ignore()
+        self.hide()
+
+
+if __name__ == "__main__":
     app = QApplication.instance()
 
     if app is None:
         app = QApplication(sys.argv)
 
-    # Set up the dark theme
-    palette = app.palette()
-    palette.setColor(palette.ColorRole.Window, Qt.GlobalColor.black)
-    palette.setColor(palette.ColorRole.WindowText, Qt.GlobalColor.white)
-    palette.setColor(palette.ColorRole.Base, Qt.GlobalColor.black)
-    palette.setColor(palette.ColorRole.AlternateBase, Qt.GlobalColor.black)
-    palette.setColor(palette.ColorRole.ToolTipBase, Qt.GlobalColor.black)
-    palette.setColor(palette.ColorRole.ToolTipText, Qt.GlobalColor.white)
-    palette.setColor(palette.ColorRole.Text, Qt.GlobalColor.white)
-    palette.setColor(palette.ColorRole.Button, Qt.GlobalColor.black)
-    palette.setColor(palette.ColorRole.ButtonText, Qt.GlobalColor.white)
-    palette.setColor(palette.ColorRole.BrightText, Qt.GlobalColor.red)
-    palette.setColor(palette.ColorRole.Highlight, Qt.GlobalColor.gray)
-    palette.setColor(palette.ColorRole.HighlightedText, Qt.GlobalColor.black)
-    app.setPalette(palette)
-
     dialog = SettingsDialog()
     dialog.show()
     sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
-

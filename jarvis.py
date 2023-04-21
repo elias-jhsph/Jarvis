@@ -4,9 +4,12 @@ import time
 import threading
 import multiprocessing
 import atexit
+
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QIcon, QAction
 import settings_menu
+import viewer_window
 import connections
 from jarvis_process import jarvis_process
 from jarvis_interrupter import stop_word_detection
@@ -16,10 +19,11 @@ import logger_config
 logger = logger_config.get_logger()
 
 
-def clean_up_files():
+def clean_up_files() -> None:
     """
-    Clean up files from previous runs.
-    :return:
+    Clean up audio and email files from previous runs.
+
+    :return: None
     """
     folder = "audio_output"
     if not os.path.exists(folder):
@@ -46,6 +50,9 @@ def clean_up_files():
 
 
 class JarvisApp(QApplication):
+    """
+    Main application class for Jarvis.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         logger.info("CWD " + os.getcwd())
@@ -54,8 +61,10 @@ class JarvisApp(QApplication):
             "start": "Start Listening",
             "stop": "Stop Listening",
             "quit": "Quit",
+            "settings": "Settings",
             "break_message": "Stopped",
             "interrupt": "Jarvis, Stop.",
+            "viewer": "Live Chat / History",
         }
         self.codes = connections.get_connection_ring()
 
@@ -69,9 +78,13 @@ class JarvisApp(QApplication):
         self.interrupt_action.triggered.connect(self.interrupt_listener)
         self.menu.addAction(self.interrupt_action)
 
-        self.settings_action = QAction("Settings", self)
+        self.settings_action = QAction(self.config["settings"], self)
         self.settings_action.triggered.connect(self.settings_listener)
         self.menu.addAction(self.settings_action)
+
+        self.viewer_action = QAction(self.config["viewer"], self)
+        self.viewer_action.triggered.connect(self.viewer_listener)
+        self.menu.addAction(self.viewer_action)
 
         self.quit_action = QAction(self.config["quit"], self)
         self.quit_action.triggered.connect(self.quit_listener)
@@ -79,12 +92,13 @@ class JarvisApp(QApplication):
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setContextMenu(self.menu)
 
-        # Your initialization code
+        # Initialize variables
         self.strobe_speed = 1
         self.strobe_fast_speed = 0.5
         self.ps = None
         self.ps_interrupter = None
-        self.settings = None
+        self.settings = settings_menu.SettingsDialog()
+        self.viewer = viewer_window.ChatWindow()
         self._set_environment()
         self.message_queue = None
         self.chat_queue = None
@@ -92,7 +106,7 @@ class JarvisApp(QApplication):
         self.stop_event = multiprocessing.Event()
         self.skip_event = multiprocessing.Event()
         self.icon_thread = None
-        self.chat_thread = None
+        self.animation_thread = None
         clean_up_files()
         atexit.register(self.cleanup)
         logger.info("Ready!")
@@ -101,21 +115,27 @@ class JarvisApp(QApplication):
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
 
-    def settings_listener(self):
-        """Opens the settings pop-up menu."""
-        if self.settings is None:
-            self.settings = settings_menu.SettingsDialog()
-            self.settings.finished.connect(self.on_settings_closed)
-            self.settings.show()
-        else:
-            if not self.settings.isVisible():
-                self.settings.show()
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(lambda: self.viewer.jarvis_waveform.update_icon_path(self.icon))
+        self.update_timer.start(300)
 
-    def on_settings_closed(self):
+    def settings_listener(self) -> None:
+        """Opens the settings pop-up menu."""
+        if not self.settings.isVisible():
+            self.settings.update_item_colors()
+            self.settings.show()
+
+    def viewer_listener(self) -> None:
+        """Opens the settings pop-up menu."""
+        if not self.viewer.isVisible():
+            self.viewer.show()
+
+    def on_settings_closed(self) -> None:
+        """Updates the settings when the settings pop-up menu is closed."""
         self.settings = None
         self.settings = connections.get_connection_ring()
 
-    def _set_environment(self):
+    def _set_environment(self) -> None:
         """Sets the environment for the Jarvis process."""
         logger.info("Setting environment")
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -127,18 +147,12 @@ class JarvisApp(QApplication):
         else:
             os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
 
-    def interrupt_listener(self):
+    def interrupt_listener(self) -> None:
         """Interrupts the current process."""
         logger.info("Interrupting process")
         self.skip_event.set()
 
-    def chat_logger(self):
-        while self.chat_queue is not None:
-            if not self.chat_queue.empty():
-                message = self.chat_queue.get()
-                logger.info(f"QUEUE - {str(message)}")
-
-    def flash_icon(self):
+    def flash_icon(self) -> None:
         default_icon = "icons/icon.icns"
         while self.message_queue is not None:
             if not self.message_queue.empty():
@@ -175,10 +189,11 @@ class JarvisApp(QApplication):
         self.tray_icon.setIcon(QIcon(self.icon))
         logger.info("Exiting icon thread")
 
-    def start_stop_listener(self):
+    def start_stop_listener(self) -> None:
         """Starts or continues the listening process."""
         if self.start_stop_action.text() == self.config["start"]:
             if self.ps is None or not self.ps.is_alive():
+                self.settings.warning_label.setVisible(False)
                 logger.info("Starting listener")
                 logger.info("Booting process...")
                 self.message_queue = multiprocessing.Queue()
@@ -186,30 +201,29 @@ class JarvisApp(QApplication):
                 self.icon_thread.daemon = True
                 self.icon_thread.start()
                 self.chat_queue = multiprocessing.Queue()
-                self.chat_thread = threading.Thread(target=self.chat_logger)
-                self.chat_thread.daemon = True
-                self.chat_thread.start()
                 self.stop_event = multiprocessing.Event()
                 self.ps = multiprocessing.Process(target=jarvis_process,
                                                   args=([self.stop_event, self.skip_event,
                                                          self.message_queue, self.chat_queue]))
                 self.ps_interrupter = multiprocessing.Process(target=stop_word_detection,
                                                               args=([self.stop_event, self.skip_event]))
+                self.viewer.attach_queue(self.chat_queue)
                 self.ps.start()
                 self.ps_interrupter.start()
                 self.start_stop_action.setText(self.config["stop"])
-            else:
-                self._safe_kill()
-                self.start_stop_action.setText(self.config["start"])
+        else:
+            self.settings.warning_label.setVisible(False)
+            self._safe_kill()
+            self.start_stop_action.setText(self.config["start"])
 
-    def quit_listener(self):
+    def quit_listener(self) -> None:
         """Quits the application."""
         logger.info("Trying to quit application")
         self.cleanup()
         logger.info("Goodbye")
         self.quit()
 
-    def _safe_kill(self):
+    def _safe_kill(self) -> None:
         if self.ps is not None and self.ps.is_alive():
             self.stop_event.set()
             self.message_queue.put("goodbye")
@@ -233,11 +247,14 @@ class JarvisApp(QApplication):
                 else:
                     logger.info("Medium killed interrupter!")
             self.message_queue = None
+            self.chat_queue = None
             self.process_status = None
+            time.sleep(1)
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Cleans up resources."""
         self._safe_kill()
+        self.viewer.jarvis_waveform.force_close()
         logger.info("Cleaning up resources")
         if self.message_queue is not None:
             self.message_queue.close()

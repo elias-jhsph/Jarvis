@@ -40,6 +40,7 @@ def clean_up_query(raw_query):
 
     :param raw_query: str, the raw query string
     :return: str, cleaned-up query string
+    :rtype: str
     """
     raw_query = raw_query[raw_query[:50].lower().find("the following") + 13:]
     return re.sub("^[^a-z|A-Z]+", "", raw_query)
@@ -51,6 +52,7 @@ def clean_up_reminder(raw_query):
 
     :param raw_query: str, the raw reminder string
     :return: str, cleaned-up reminder string
+    :rtype: str
     """
     raw_query = raw_query[raw_query[:50].lower().find("reminder") + 8:]
     query = re.sub("^[^a-z|A-Z]+", "", raw_query)
@@ -61,6 +63,14 @@ def clean_up_reminder(raw_query):
 
 
 def clean_up_search_smart(raw_query):
+    """
+    Clean up the search smart query string by removing extra characters before the actual query.
+
+    :param raw_query: the raw query string
+    :type raw_query: str
+    :return: cleaned-up query string
+    :rtype: str
+    """
     output, reason = generate_simple_response([{"role": "system", "content": f'Return ONLY the part of this query that '
                                                                              f'is the query and omit the part of this '
                                                                              f'query that requests any kind of search '
@@ -92,7 +102,7 @@ def internet_words_in(raw_query):
     """
     internet_words = ["internet", "google", "search", "lookup", "look up", "website", "web"]
     for word in internet_words:
-        if raw_query.find(word) >= 0:
+        if len(re.findall("^"+word+"| "+word, raw_query)) > 0:
             return True
     return False
 
@@ -106,7 +116,7 @@ def last_response_words_in(raw_query):
     """
     last_response_words = ["response", "thing", "question", "message", "answer", "reply", "result", "output"]
     for word in last_response_words:
-        if raw_query.find(word) >= 0:
+        if len(re.findall("^"+word+"| "+word, raw_query)) > 0:
             return True
     return False
 
@@ -151,7 +161,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                     return "I'm so sorry I didn't catch that. I think I cut you off."
                 file = text_to_speech("Emailing you the following reminder: " + reminder)
                 stop_audio_event.set()
-                play_audio_file(file, blocking=True, destroy=True, add_stop_event=skip)
+                play_audio_file(file, blocking=True, destroy=True, added_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 output = email_processor("Jarvis reminder: " + reminder[:200]+"...", reminder)
@@ -160,7 +170,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                 file = text_to_speech(output, model=get_model()['name'])
                 if skip.is_set():
                     return "Sorry."
-                play_audio_file(file, blocking=True, destroy=True, add_stop_event=skip)
+                play_audio_file(file, blocking=True, destroy=True, added_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 return output
@@ -172,7 +182,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                 file = text_to_speech('Searching the internet for your query, "' + query +
                                       '". I will let you know when I am done working on that email.')
                 stop_audio_event.set()
-                play_audio_file(file, blocking=False, destroy=True, add_stop_event=skip)
+                play_audio_file(file, blocking=False, destroy=True, added_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 response, data = internet_processor(query, stream=False, skip=skip)
@@ -185,7 +195,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                 file = text_to_speech(output, model=get_model()['name'])
                 if skip.is_set():
                     return "Sorry."
-                play_audio_file(file, blocking=True, destroy=True, skip=skip)
+                play_audio_file(file, blocking=True, destroy=True, added_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 return output
@@ -196,7 +206,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                     return "I'm so sorry I didn't catch that. I think I cut you off."
                 file = text_to_speech("Emailing you my response to: " + query)
                 stop_audio_event.set()
-                play_audio_file(file, blocking=False, destroy=True, add_stop_event=skip)
+                play_audio_file(file, blocking=False, destroy=True, added_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 output = email_processor("Jarvis responding to question: " + query, generate_response(query))
@@ -205,7 +215,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                 file = text_to_speech(output, model=get_model()['name'])
                 if skip.is_set():
                     return "Sorry."
-                play_audio_file(file, blocking=True, destroy=True, skip=skip)
+                play_audio_file(file, blocking=True, destroy=True, added_stop_event=skip)
                 if skip.is_set():
                     return "Sorry."
                 return output
@@ -238,7 +248,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
         if skip.is_set():
             return "Sorry."
         stop_flag = play_audio_file([file, "audio_files/searching.wav"], loops=[1, 7],
-                                    blocking=False, destroy=[True, False], skip=skip)
+                                    blocking=False, destroy=[True, False], added_stop_event=skip)
         if skip.is_set():
             return "Sorry."
         response, data = internet_processor(query, stop_audio_event=stop_flag, skip=skip)
@@ -474,13 +484,14 @@ def free_email_processor(subject, text, recipients):
         return f"I am so sorry, but I was unable to create and open the email draft. Error: {e}"
 
 
-def get_chat_history(id=None, limit=10):
+def get_chat_history(id=None, limit=10, reload_disk=False):
     """
     Get the chat history for the specified user ID.
 
     :param id: str, the user ID to get the chat history for
     :param limit: int, the maximum number of chat history entries to return
+    :param reload_disk: bool, whether to reload the chat history from disk
     :return: list, a list of chat history entries
     """
-    output = get_chat_db().get_history_from_id_and_earlier(id=id, n_results=limit)
+    output = get_chat_db().get_history_from_id_and_earlier(id=id, n_results=limit, reload_disk=reload_disk)
     return output

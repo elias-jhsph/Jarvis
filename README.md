@@ -29,20 +29,17 @@ dmgbuild -s settings.py -D app=dist/Jarvis.app "Jarvis" dist/jarvis_installer.dm
 2. select start listening (this also may take some time)
 3. wait for the tone to play
 4. now when you say the wake word "Jarvis" you can start talking to Jarvis (Note: it may help to pause very briefly between saying the wake word and starting your query)
+5. At anytime if you want to view the chat select "Live Chat / History" from the menu bar
+6. At anytime if you want Jarvis to stop talking select "Jarvis, Stop." from the menu bar or loudly say "Jarvis, Stop."
+7. At anytime if you want Jarvis to stop listening for the wake word select "Stop Listening" from the menu bar
 
-The app automatically listens for the wake word "Jarvis." Once activated, you can use the following voice commands to perform various actions:
-
-- "Email me the following internet search"
-- "Send me the following internet search"
-- "Email me an internet search for the following"
-- "Email me the following"
-
-- "Search the internet for the following"
-- "Internet search me the following"
-- "Internet search for the following"
-- "Search the following"
-
-- "Email me the following reminder"
+The app automatically listens for the wake word "Jarvis." 
+Once activated, if you include the following command words towards the beginning of your query jarvis will do an internet search:
+- "internet", "google", "search", "lookup", "look up", "website", "web"
+If you say the word "last" and include the following command words towards the beginning of your query jarvis will tell you the last thing it told you:
+- "response", "thing", "question", "message", "answer", "reply", "result", "output"
+If you combine either of those specified above with the word email, Jarvis will email you the result of the query.
+If you include the word "reminder" in your query, Jarvis will send you an email right away with what you said as the reminder.
 
 In addition to these specific voice commands, you can also speak more generally, and the app will try to interpret your request. You don't need to use any commands other than the wake word and speaking - the app listens and responds automatically.
 
@@ -60,14 +57,15 @@ The app includes a settings menu that can be accessed by clicking on the "Settin
 - Pico Key: Set the Pico API key for wake word detection conversion
     - If you don't have a Pico account, you can create one at https://picovoice.ai/
     - If you don't add it, the app will use pocketsphinx for wake word detection which may be a little worse
-- Pico Path: Set the file path for the Pico wake word detection engine .ppn file
+- Pico Path to wake word .ppn: Set the file path for the Pico wake word detection engine .ppn file
     - This .ppn file needs to match your pico key to work 
-- Google Key: Set the Google API key for internet search queries
+- Pico Path to stop word .ppn: Set the file path for the Pico stop word detection engine .ppn file
+    - This .ppn file needs to match your pico key to work 
+- Google Key adn CX: Set the Google API key for internet search queries
     - Technically you are not supposed to use Google search without using the API
     - If you don't add this, the googlesearch-python will be used instead
     - To get a Google api key, go to https://console.cloud.google.com/apis/credentials
-- Google CX: Set the Google API CX for internet search queries
-    - This should be the custom search engine that you have access to via the google api
+    - The CX should be the custom search engine that you have access to via the Google API
 - GCP JSON Path: Set the file path for the Google Cloud Platform JSON key file
     - Google text to speach sounds great but if you don't want to set this up gtts will be used instead
     - GCP Must have access to text to speech API

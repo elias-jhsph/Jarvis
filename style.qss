@@ -1,0 +1,42 @@
+/* QMainWindow - Main widget styles */
+QMainWindow {
+  border: 10px solid black;
+  background-color: black;
+}
+
+/* QScrollBar - Dark Theme */
+QScrollBar:vertical {
+  background: #2A2A2A;
+  width: 15px;
+  margin: 15px 0 15px 0;
+}
+
+QScrollBar::handle:vertical {
+  background: #5A5A5A;
+  min-height: 30px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+  background: none;
+  height: 0;
+  width: 0;
+  subcontrol-origin: margin;
+}
+
+QScrollBar:horizontal {
+  background: #2A2A2A;
+  height: 15px;
+  margin: 0 15px 0 15px;
+}
+
+QScrollBar::handle:horizontal {
+  background: #5A5A5A;
+  min-width: 30px;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+  background: none;
+  height: 0;
+  width: 0;
+  subcontrol-origin: margin;
+}
