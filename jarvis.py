@@ -5,6 +5,14 @@ import threading
 import multiprocessing
 import atexit
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+lib_dir = os.path.join(current_dir, '..', 'Frameworks')
+numpy_dir = os.path.join(current_dir, 'Resources', 'lib', 'python3.10', 'numpy', '.dylibs')
+if 'DYLD_LIBRARY_PATH' in os.environ:
+    os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}:{os.environ['DYLD_LIBRARY_PATH']}"
+else:
+    os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
+
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 from PySide6.QtGui import QIcon, QAction
@@ -134,18 +142,6 @@ class JarvisApp(QApplication):
         """Updates the settings when the settings pop-up menu is closed."""
         self.settings = None
         self.settings = connections.get_connection_ring()
-
-    def _set_environment(self) -> None:
-        """Sets the environment for the Jarvis process."""
-        logger.info("Setting environment")
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        lib_dir = os.path.join(current_dir, '..', 'Frameworks')
-        numpy_dir = os.path.join(current_dir, 'Resources', 'lib', 'python3.10', 'numpy', '.dylibs')
-
-        if 'DYLD_LIBRARY_PATH' in os.environ:
-            os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}:{os.environ['DYLD_LIBRARY_PATH']}"
-        else:
-            os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
 
     def interrupt_listener(self) -> None:
         """Interrupts the current process."""

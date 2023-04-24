@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # Modify connections
-PUBLIC = True
+PUBLIC = False
 
 # Check if we are packaging for the public or for internal use
 if PUBLIC:
@@ -38,6 +38,7 @@ if PUBLIC:
         shutil.copyfile(os.path.join("pico_models", file), os.path.join("pico_models_PRIVATE", file))
     shutil.rmtree("pico_models", ignore_errors=True)
     os.mkdir("pico_models")
+    pico_models_list = []
 
     # Remove the private logs
     if not os.path.exists("logs"):
@@ -52,6 +53,9 @@ else:
         os.mkdir("database")
     if not os.path.exists("logs"):
         os.mkdir("logs")
+    pico_models_list = []
+    for file in os.listdir("pico_models"):
+        pico_models_list.append(os.path.join("pico_models", file))
 
 sys.setrecursionlimit(2000)
 
@@ -78,9 +82,9 @@ PACKAGE_NAME_MAPPING = {
     'beautifulsoup4': 'bs4',
     'google-api-python-client': 'googleapiclient',
     'jaraco.classes': 'SKIP',
-    'pyqt6': 'PyQt6',
-    'pyqt6-qt6': 'SKIP',
-    'pyqt6-sip': 'SKIP',
+    'pyside6': 'PySide6',
+    'pyside6-addons': 'SKIP',
+    'pyside6-essentials': 'SKIP',
     'pycryptodomex': 'Cryptodome',
     'pyyaml': 'yaml',
     'googlesearch-python': 'googlesearch',
@@ -160,14 +164,15 @@ def find_packages_improved():
 sound_c_path = 'venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_x86_64.dylib'
 if platform.machine() == "arm64":
     sound_c_path = 'venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_arm64.dylib'
+shiboken6_path = 'venv/lib/python3.10/site-packages/shiboken6/libshiboken6.abi3.6.5.dylib'
 
 
 APP = ['jarvis.py']
 
 DATA_FILES = [
-    'Jarvis_en_linux_v2_1_0.ppn', 'Jarvis_en_mac_v2_1_0.ppn', 'config_data.json', 'jarvis_process.py',
+    'config_data.json', 'jarvis_process.py',
     'gpt_interface.py', 'text_speech.py', 'connections.py', 'logger_config.py', 'requirements.txt',
-    'audio_listener.py', 'audio_player.py', 'icon.icns', 'processor.py', 'internet_helper.py',
+    'audio_listener.py', 'audio_player.py', 'processor.py', 'internet_helper.py',
     'assistant_history.py', 'logger_config.py', 'settings_menu.py', 'streaming_response_audio.py',
     'animation.py', 'viewer_window.py', 'jarvis_interrupter.py', 'style.qss',
     ("audio_files", ['audio_files/beeps.wav', 'audio_files/booting.wav', 'audio_files/go_on.wav',
@@ -187,8 +192,9 @@ DATA_FILES = [
                           ]),
     ("icons", ['icons/icon.icns', 'icons/listening.icns', 'icons/processing_middle.icns',
                'icons/processing_small.icns']),
+    ("pico_models", pico_models_list),
     ("database", []),
-    ('../Frameworks', [sound_c_path])
+    ('../Frameworks', [sound_c_path, shiboken6_path])
     ]
 
 if PUBLIC:
@@ -196,7 +202,7 @@ if PUBLIC:
 
 OPTIONS = {
     'argv_emulation': True,
-    'iconfile': 'icon.icns',
+    'iconfile': 'icons/icon.icns',
     'plist': {
         'CFBundleShortVersionString': '0.2.0',
         'LSUIElement': True,

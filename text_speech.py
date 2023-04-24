@@ -262,6 +262,12 @@ def free_text_to_speech(text: str, model="gpt-4", stream=False):
     if model.find("gpt-4") >= 0:
         slow_flag = False
     if sys.platform == 'darwin':
+        out = subprocess.run(['say', '-v', '?'], capture_output=True)
+        vflag = []
+        if out.stdout.decode("utf-8").find("Samantha") >= 0:
+            vflag = ['-v', 'Samantha']
+        if out.stdout.decode("utf-8").find("Tom") >= 0:
+            vflag = ['-v', 'Tom']
         fixed_text = text.replace('"', r'\"')
         pitch = "44"
         if slow_flag:
@@ -269,7 +275,7 @@ def free_text_to_speech(text: str, model="gpt-4", stream=False):
         text_cmd = f'[[pbas {pitch}]] "{fixed_text}"'
 
         output_file = "audio_output/" + str(uuid.uuid4()) + ".wav"
-        subprocess.run(['say', text_cmd, "-o", output_file, '--data-format=LEI16@22050'])
+        subprocess.run(['say']+vflag+[text_cmd, "-o", output_file, '--data-format=LEI16@22050'])
         if not stream:
             return output_file
         with open(output_file, 'rb') as file:
