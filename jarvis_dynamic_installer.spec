@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import shutil
+import subprocess
 import sys
 import warnings
 
@@ -49,6 +50,7 @@ if public:
     if not os.path.exists("logs"):
         os.mkdir("logs")
 else:
+    subprocess.run(["python", "EXCLUDE.py"])
     with open("connections_INTERNAL.py", "r") as f:
         code = f.read()
     with open("connections.py", "w") as f:
