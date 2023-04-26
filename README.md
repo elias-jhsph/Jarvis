@@ -15,7 +15,7 @@ python -m spacy download en_core_web_sm
 3. Package the app:
    (Make sure to set PUBLIC to True in setup because the keys are not bundled in this app)
 ```
-python setup.py py2app
+pyinstaller jarvis_dynamic_installer.spec
 dmgbuild -s settings.py -D app=dist/Jarvis.app "Jarvis" dist/jarvis_installer.dmg
 ```
 4. Run the app. (Installer is now in the dist folder)
