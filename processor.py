@@ -464,8 +464,10 @@ def free_email_processor(subject, text, recipients):
 
     text_part = MIMEText(text, 'html')
     msg.attach(text_part)
-
-    eml_filename = "email_drafts/"+str(uuid.uuid4())+'email_draft.eml'
+    email_folder = "email_drafts/"
+    if getattr(sys, 'frozen', False):
+        email_folder = os.path.join(sys._MEIPASS, email_folder)
+    eml_filename = email_folder+str(uuid.uuid4())+'email_draft.eml'
     with open(eml_filename, 'w', encoding='utf-8') as eml_file:
         eml_file.write(msg.as_string())
 

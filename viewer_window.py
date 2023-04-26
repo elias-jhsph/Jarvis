@@ -1,3 +1,4 @@
+import os
 import urllib
 import sys
 import datetime
@@ -19,7 +20,10 @@ def load_stylesheet() -> str:
     :return: The stylesheet content.
     :rtype: str
     """
-    file = QFile("style.qss")
+    prefix = ""
+    if getattr(sys, 'frozen', False):
+        prefix = sys._MEIPASS + "/"
+    file = QFile(prefix+"style.qss")
     file.open(QFile.ReadOnly | QFile.Text)
     stream = QTextStream(file)
     return stream.readAll()
@@ -116,6 +120,7 @@ class ChatWindow(QMainWindow):
         self.oldest_message_id = None
         self.largest_message_id = None
         self.last_rt_message_role = None
+        self.messages_in_history_area = 0
         self.retry_count = 0
         self.init_ui()
 
@@ -226,7 +231,10 @@ class ChatWindow(QMainWindow):
         """
         Create a loading animation to display when Jarvis is thinking, speaking, or listening.
         """
-        self.loading_movie = QMovie("icons/loading.gif")
+        icons_path = "icons/"
+        if getattr(sys, "frozen", False):
+            icons_path = os.path.join(sys._MEIPASS, icons_path)
+        self.loading_movie = QMovie(icons_path + "loading.gif")
         self.loading_label = QLabel(self)
         self.loading_label.setMovie(self.loading_movie)
         self.loading_label.setScaledContents(True)
@@ -282,7 +290,7 @@ class ChatWindow(QMainWindow):
         Handle the scroll position of the chat history. If the user is at the top of the chat history,
         load older messages.
         """
-        if value == 0:
+        if value == 0 and self.messages_in_history_area > 4:
             self.load_older_chat_history()
 
     def add_message_to_chat(self, chat_area, message, add_to_bottom=False,
@@ -321,6 +329,8 @@ class ChatWindow(QMainWindow):
         content = format_message(message["content"]).lstrip()
         if append_to_last_bubble:
             content = " " + content
+        else:
+            self.messages_in_history_area += 1
         timestamp_str = message.get("utc_time", None)
         if timestamp_str:
             timestamp_obj = datetime.datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")

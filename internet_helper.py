@@ -2,7 +2,7 @@ import threading
 import requests
 from bs4 import BeautifulSoup
 import openai
-from connections import get_openai_key, get_google, get_google_cx, ConnectionKeyError
+from connections import get_openai_key, get_google_key, get_google_cx, ConnectionKeyError
 from googleapiclient.discovery import build
 from googlesearch import search as google_search
 from tiktoken import encoding_for_model
@@ -24,7 +24,7 @@ enc = encoding_for_model(base_model)
 try:
     free = False
     cx = get_google_cx()
-    service = build("customsearch", "v1", developerKey=get_google(), static_discovery=False)
+    service = build("customsearch", "v1", developerKey=get_google_key(), static_discovery=False)
 except ConnectionKeyError:
     free = True
 

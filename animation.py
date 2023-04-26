@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from pyaudio import PyAudio, paInt16, paContinue
@@ -21,8 +22,10 @@ class JarvisWaveform(QWidget):
         self.setWindowTitle("Jarvis Icon Animation")
         self.resize(120, 120)
         self.num_waves = 5
-
-        self.icon_path = "icons/icon.png"
+        icons_folder = "icons/"
+        if getattr(sys, 'frozen', False):
+            icons_folder = os.path.join(sys._MEIPASS, "icons/")
+        self.icon_path = icons_folder + "icon.icns"
         self.icon = QPixmap(self.icon_path)
         self.prev_icon = None
         self.prev_icon_opacity = 0
@@ -257,6 +260,6 @@ if __name__ == "__main__":
     main_widget.show()
 
     # Demonstrate the dynamic icon update after 5 seconds
-    QTimer.singleShot(2000, lambda: main_widget.update_icon_path("icons/listening.png"))
+    QTimer.singleShot(2000, lambda: main_widget.update_icon_path("icons/listening.incs"))
     QTimer.singleShot(4000, lambda: main_widget.update_icon_path("icons/processing_small.icns"))
     sys.exit(app.exec())

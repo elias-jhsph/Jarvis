@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import re
+import sys
 import warnings
 from typing import List
 
@@ -87,6 +88,8 @@ class AssistantHistory:
         self.model_injection = model_injection
         self.time_injection = time_injection
         self.persist_directory = persist_directory
+        if getattr(sys, 'frozen', False):
+            self.persist_directory = os.path.join(sys._MEIPASS, self.persist_directory)
         self.chroma_db_impl = chroma_db_impl
         self.client = chromadb.Client(
             Settings(

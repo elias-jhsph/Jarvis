@@ -97,8 +97,12 @@ def text_to_speech(text: str, stream=False, model="gpt-4"):
     if stream:
         return response.audio_content
 
+    audio_folder = "audio_output/"
+    if getattr(sys, 'frozen', False):
+        audio_folder = os.path.join(sys._MEIPASS, audio_folder)
+
     # Save the binary audio content to a file
-    output_file = "audio_output/"+str(uuid.uuid4())+".wav"
+    output_file = audio_folder+str(uuid.uuid4())+".wav"
     with open(output_file, "wb") as out:
         out.write(response.audio_content)
         logger.info(f'Audio content written to file "{output_file}"')
@@ -258,6 +262,9 @@ def free_text_to_speech(text: str, model="gpt-4", stream=False):
     :return: The path to the audio file or the audio content as a stream.
     :rtype: str or bytes
     """
+    audio_folder = "audio_output/"
+    if getattr(sys, 'frozen', False):
+        audio_folder = os.path.join(sys._MEIPASS, audio_folder)
     slow_flag = True
     if model.find("gpt-4") >= 0:
         slow_flag = False
@@ -274,7 +281,7 @@ def free_text_to_speech(text: str, model="gpt-4", stream=False):
             pitch = "40"
         text_cmd = f'[[pbas {pitch}]] "{fixed_text}"'
 
-        output_file = "audio_output/" + str(uuid.uuid4()) + ".wav"
+        output_file = audio_folder + str(uuid.uuid4()) + ".wav"
         subprocess.run(['say']+vflag+[text_cmd, "-o", output_file, '--data-format=LEI16@22050'])
         if not stream:
             return output_file
@@ -297,7 +304,7 @@ def free_text_to_speech(text: str, model="gpt-4", stream=False):
             audio_content = wav_buffer.read()
             return audio_content
         else:
-            output_file = "audio_output/" + str(uuid.uuid4()) + ".wav"
+            output_file = audio_folder + str(uuid.uuid4()) + ".wav"
             mp3_output = io.BytesIO()
             tts.write_to_fp(mp3_output)
             mp3_output.seek(0)

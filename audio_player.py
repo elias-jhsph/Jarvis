@@ -2,6 +2,7 @@ import atexit
 import ctypes.util
 import functools
 import os
+import sys
 import time
 import threading
 import wave
@@ -80,7 +81,6 @@ def play_audio_file(file_path, blocking: bool = True, loops=1, delay: float = 0,
 
     if blocking:
         time.sleep(delay)
-        print(file_path, stop_event, loops, 0, destroy, added_stop_event)
         _play_audio_file_blocking(file_path, stop_event, loops, 0, destroy, added_stop_event)
     else:
         playback_thread = threading.Thread(target=_play_audio_file_blocking,
@@ -111,6 +111,8 @@ def _play_audio_file_blocking(file_path: str, stop_event: threading.Event, loops
     global pa
     global audio_stream
     stream = None
+    if getattr(sys, 'frozen', False):
+        file_path = os.path.join(sys._MEIPASS, file_path)
     if isinstance(file_path, list):
         if isinstance(loops, list) and isinstance(destroy, list):
             for i, file in enumerate(file_path):

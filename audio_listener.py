@@ -1,3 +1,4 @@
+import sys
 import time
 import os
 import wave
@@ -157,7 +158,10 @@ def convert_to_text(audio: BytesIO) -> str:
     :rtype: str
     """
     logger.info("Converting audio to text...")
-    model = whisper.load_model("base.en", download_root="whisper_models")
+    dir_path = "whisper_models"
+    if getattr(sys, 'frozen', False):
+        dir_path = os.path.join(sys._MEIPASS, "whisper_models")
+    model = whisper.load_model("base.en", download_root=dir_path)
     array_audio, sampling_rate = read(audio)
     array_audio = array_audio.astype(float32)
     result = model.transcribe(array_audio, fp16=is_available())

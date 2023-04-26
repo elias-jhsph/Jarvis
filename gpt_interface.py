@@ -39,7 +39,6 @@ models = {"primary": {"name": "gpt-4",
 
 # Global variables
 history_changed = False
-history_path = "history.json"
 try:
     openai.api_key = get_openai_key()
 except ConnectionKeyError:
@@ -142,7 +141,7 @@ def get_model(error=False):
     """
     Returns the model to use for the next query.
 
-    :param error: Whether or not the last query resulted in an error.
+    :param error: Whether the last query resulted in an error.
     :type error: bool
     :return: The model to use for the next query.
     :rtype: dict

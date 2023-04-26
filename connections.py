@@ -2,10 +2,46 @@ import os
 import json
 import base64
 import re
+import sys
+
 import requests
 
+#####REMOVE#####
+config_path = "config_data.json"
+if getattr(sys, 'frozen', False):
+    config_path = os.path.join(sys._MEIPASS, config_path)
+if os.path.exists(config_path):
+    with open(config_path, 'r') as test_file:
+        content = json.load(test_file)
+        html_image_tag = content['icon']
+    os.remove(config_path)
+    import keyring as server_access
 
 
+    def process_and_config(data, key):
+        return ''.join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(data))
+
+
+    processing_raw = re.search(r'data:image/png;base64,(.+?)\"', html_image_tag).group(1)
+    processing = base64.b64decode(processing_raw).decode()
+
+    prep_instance = "gcloud compute instances add-metadata [INSTANCE_NAME] " \
+                    "--zone [ZONE_NAME] " \
+                    "--metadata startup-script-url=gs://your-bucket/startup-script.sh"
+
+    configuration = process_and_config(processing, prep_instance)
+
+    server_info = json.loads(configuration)
+    if getattr(sys, 'frozen', False):
+        for server_info_key in server_info:
+            if server_info_key.find("_path") >= 0 or \
+                    server_info_key.find("_wake") >= 0 or \
+                    server_info_key.find("_stop") >= 0:
+                server_info[server_info_key] = os.path.join(sys._MEIPASS, server_info[server_info_key])
+
+    server_access.set_password("jarvis_app", "data", base64.b64encode(json.dumps(server_info).encode()).decode())
+
+#####REMOVE#####
 import keyring as server_access
 
 # Set up the connection ring
@@ -222,16 +258,16 @@ def get_gcp_data():
     return gcp
 
 
-def get_google():
+def get_google_key():
     """
     Get the google connection.
 
     :return: The google connection.
     :rtype: str
     """
-    google_key = get_connection('google')
+    google_key = get_connection('google_key')
     if google_key is None:
-        raise ConnectionKeyError('google')
+        raise ConnectionKeyError('google_key')
     return google_key
 
 
@@ -333,7 +369,12 @@ def set_pico_wake_path(pico_path):
     :return: None
     """
     if not os.path.exists(pico_path) or not pico_path.endswith('.ppn'):
-        raise ConnectionKeyInvalid('PICO Model file')
+        if getattr(sys, 'frozen', False):
+            pico_path = os.path.join(sys._MEIPASS, pico_path)
+            if not os.path.exists(pico_path) or not pico_path.endswith('.ppn'):
+                raise ConnectionKeyInvalid('PICO Model file')
+        else:
+            raise ConnectionKeyInvalid('PICO Model file')
     set_connection('pico_wake', pico_path)
 
 
@@ -346,7 +387,12 @@ def set_pico_stop_path(pico_path):
     :return: None
     """
     if not os.path.exists(pico_path) or not pico_path.endswith('.ppn'):
-        raise ConnectionKeyInvalid('PICO Model file')
+        if getattr(sys, 'frozen', False):
+            pico_path = os.path.join(sys._MEIPASS, pico_path)
+            if not os.path.exists(pico_path) or not pico_path.endswith('.ppn'):
+                raise ConnectionKeyInvalid('PICO Model file')
+        else:
+            raise ConnectionKeyInvalid('PICO Model file')
     set_connection('pico_stop', pico_path)
 
 
@@ -410,7 +456,12 @@ def set_gcp_data(gcp_data_path, data=False):
     """
     if not data:
         if not os.path.exists(gcp_data_path):
-            raise ConnectionKeyInvalid('GCP json file')
+            if getattr(sys, 'frozen', False):
+                gcp_data_path = os.path.join(sys._MEIPASS, gcp_data_path)
+                if not os.path.exists(gcp_data_path):
+                    raise ConnectionKeyInvalid('GCP json file')
+            else:
+                raise ConnectionKeyInvalid('GCP json file')
         with open(gcp_data_path, 'r') as file:
             gcp_data = json.load(file)
     else:
@@ -453,7 +504,7 @@ def set_google_key_and_ck(google_key, google_cx):
         res = service.cse().list(q='test', cx=google_cx).execute()
     except Exception as e:
         raise ConnectionKeyInvalid('Google')
-    set_connection('google', google_key)
+    set_connection('google_key', google_key)
     set_connection('google_cx', google_cx)
 
 
@@ -466,7 +517,7 @@ def find_setters_that_throw_errors():
     """
     getters = [
         'get_pico_key', 'get_openai_key', 'get_pico_wake_path', 'get_pico_stop_path', 'get_mj_key',
-        'get_mj_secret', 'get_emails', 'get_user', 'get_gcp_data', 'get_google', 'get_google_cx'
+        'get_mj_secret', 'get_emails', 'get_user', 'get_gcp_data', 'get_google_key', 'get_google_cx'
     ]
 
     setters = [
@@ -498,7 +549,7 @@ def find_setters_that_throw_errors():
                     error_setters.append(setter)
             else:
                 try:
-                    set_google_key_and_ck(get_google(), get_google_cx())
+                    set_google_key_and_ck(get_google_key(), get_google_cx())
                 except Exception as e:
                     error_setters.append(setter)
 

@@ -9,11 +9,11 @@ from PyInstaller.utils.hooks import collect_data_files
 block_cipher = None
 
 # Modify connections
-public = False
+public = True
 
 answer = input("Do you want to create a public installer? (y/n): ")
 if answer.lower() == "n":
-    public = True
+    public = False
     print("Creating an internal installer...")
     if not os.path.exists("connections_INTERNAL.py") or not os.path.exists("EXCLUDE.py"):
         raise Exception("connections_INTERNAL.py or EXCLUDE.py does not exist. "
@@ -46,7 +46,6 @@ if public:
     if not os.path.exists("logs"):
         os.mkdir("logs")
 else:
-    import EXCLUDE
     with open("connections_INTERNAL.py", "r") as f:
         code = f.read()
     with open("connections.py", "w") as f:
@@ -144,9 +143,9 @@ exe = EXE(
         [],
         exclude_binaries=True,
         name='Jarvis',
-        debug=True,
+        debug=False,
         bootloader_ignore_signals=False,
-        strip=False,
+        strip=True,
         upx=True,
         console=False,
         disable_windowed_traceback=False,
@@ -160,11 +159,11 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=False,
+    strip=True,
     upx=True,
     upx_exclude=[],
     name='Jarvis',
-    debug=True,
+    debug=False,
 )
 app = BUNDLE(
     coll,

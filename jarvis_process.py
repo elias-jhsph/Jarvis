@@ -1,4 +1,6 @@
 import os
+import sys
+
 import pvporcupine
 import time
 import datetime
@@ -67,6 +69,10 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
     try:
         global last_time
         global free_tts
+
+        logs_path = "logs/"
+        if getattr(sys, 'frozen', False):
+            logs_path = os.path.join(sys._MEIPASS, "logs")
 
         # Attempt to get GCP data, if unsuccessful use free text-to-speech service
         try:
@@ -192,7 +198,7 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
                                 continue
                         except TypeError as e:
                             logger.error(e, exc_info=True)
-                            with open("logs/processor_error.log", "w") as file:
+                            with open(logs_path+"processor_error.log", "w") as file:
                                 file.write(str(e))
                             text = "I am so sorry, my circuits are all flustered, ask me again please."
                         logger.info("Text: %s", text)
@@ -220,7 +226,7 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
                         text_queue.put({"finished": True, "results": get_chat_history(limit=2)})
                     except Exception as e:
                         logger.error(e, exc_info=True)
-                        with open("logs/inner_error.log", "w") as file:
+                        with open(logs_path+"inner_error.log", "w") as file:
                             file.write(str(e))
                         stop_audio_stream()
                         play_audio_file(check_tts('audio_files/minor_error.wav'))
@@ -230,7 +236,7 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
             stop_audio_stream()
         except Exception as e:
             logger.error(e, exc_info=True)
-            with open("logs/outer_error.log", "w") as file:
+            with open(logs_path+"outer_error.log", "w") as file:
                 file.write(str(e))
             stop_audio_stream()
             play_audio_file(check_tts('audio_files/major_error.wav'))

@@ -38,6 +38,8 @@ def clean_up_files() -> None:
     :return: None
     """
     folder = "audio_output"
+    if getattr(sys, 'frozen', False):
+        folder = os.path.join(sys._MEIPASS, folder)
     if not os.path.exists(folder):
         os.makedirs(folder)
     for filename in os.listdir(folder):
@@ -49,6 +51,8 @@ def clean_up_files() -> None:
         except Exception as e:
             logger.exception(f"Error deleting file: {file_path}. Reason: {e}")
     folder = "email_drafts"
+    if getattr(sys, 'frozen', False):
+        folder = os.path.join(sys._MEIPASS, folder)
     if not os.path.exists(folder):
         os.makedirs(folder)
     for filename in os.listdir(folder):
@@ -121,7 +125,10 @@ class JarvisApp(QApplication):
         clean_up_files()
         atexit.register(self.cleanup)
         logger.info("Ready!")
-        self.icon = "icons/icon.icns"
+        self.prefix_path = ""
+        if getattr(sys, 'frozen', False):
+            self.prefix_path = sys._MEIPASS + "/"
+        self.icon = self.prefix_path + "icons/icon.icns"
         self.tray_icon.setIcon(QIcon(self.icon))
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
@@ -135,11 +142,17 @@ class JarvisApp(QApplication):
         if not self.settings.isVisible():
             self.settings.update_item_colors()
             self.settings.show()
+            self.settings.raise_()
+        else:
+            self.settings.raise_()
 
     def viewer_listener(self) -> None:
         """Opens the settings pop-up menu."""
         if not self.viewer.isVisible():
             self.viewer.show()
+            self.viewer.raise_()
+        else:
+            self.viewer.raise_()
 
     def on_settings_closed(self) -> None:
         """Updates the settings when the settings pop-up menu is closed."""
@@ -152,28 +165,28 @@ class JarvisApp(QApplication):
         self.skip_event.set()
 
     def flash_icon(self) -> None:
-        default_icon = "icons/icon.icns"
+        default_icon = self.prefix_path + "icons/icon.icns"
         while self.message_queue is not None:
             if not self.message_queue.empty():
                 self.process_status = self.message_queue.get()
             if self.process_status == "standby":
                 self.skip_event.clear()
                 if self.icon == default_icon:
-                    self.icon = "icons/listening.icns"  # Change to the second icon
+                    self.icon = self.prefix_path + "icons/listening.icns"  # Change to the second icon
                 else:
                     self.icon = default_icon  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "listening":
-                self.icon = "icons/listening.icns"  # Change back to the first icon
+                self.icon = self.prefix_path + "icons/listening.icns"  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "processing":
-                if self.icon == "icons/processing_middle.icns":
-                    self.icon = "icons/processing_small.icns"
+                if self.icon == self.prefix_path + "icons/processing_middle.icns":
+                    self.icon = self.prefix_path + "icons/processing_small.icns"
                     # Change to the second icon
                 else:
-                    self.icon = "icons/processing_middle.icns"
+                    self.icon = self.prefix_path + "icons/processing_middle.icns"
                     # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
