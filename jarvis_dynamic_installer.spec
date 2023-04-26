@@ -4,6 +4,9 @@ import os
 import platform
 import re
 import shutil
+import sys
+import warnings
+
 from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
@@ -66,10 +69,6 @@ whisper_models_list = []
 for file in os.listdir("whisper_models"):
     whisper_models_list.append(os.path.join(os.getcwd(), "whisper_models", file))
 
-sound_c_path = 'venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_x86_64.dylib'
-if platform.machine() == "arm64":
-    sound_c_path = 'venv/lib/python3.10/site-packages/_soundfile_data/libsndfile_arm64.dylib'
-
 app_name = "Jarvis"
 script_name = "jarvis.py"
 
@@ -96,9 +95,31 @@ pvp_data = collect_data_files('pvporcupine')
 pyside_core_datas = collect_data_files('PySide6.QtWebEngineCore', subdir='Qt/translations')
 whisper_datas = collect_data_files('whisper')
 
+# Patch 3.9 python for mac osx
+activated_patch = False
+# detect if this is running on an x86 mac osx machine and temporarily remove torch hook
+if platform.machine() == "x86_64" and platform.system() == "Darwin" \
+        and os.path.exists("venv/lib/python3.9/site-packages/"):
+    warnings.warn("Detected x86_64 mac osx machine with python 3.9! Patching torch hook.")
+    torch_hook_path = "venv/lib/python3.9/site-packages/_pyinstaller_hooks_contrib/hooks/stdhooks/hook-torch.py"
+    ignore_path = "venv/lib/python3.9/site-packages/_pyinstaller_hooks_contrib/hooks/stdhooks/hook-ignore_torch.py"
+    if os.path.exists(torch_hook_path):
+        activated_patch = True
+        os.rename(torch_hook_path, ignore_path)
+    from PyInstaller.utils.hooks import collect_all
+    sys.setrecursionlimit(5000)
+    tmp_ret = collect_all('torch')
+    torch_datas = tmp_ret[0]
+    torch_binaries = tmp_ret[1]
+    torch_hiddenimports = tmp_ret[2]
+else:
+    torch_datas = []
+    torch_binaries = []
+    torch_hiddenimports = []
+
 
 # Add collected data to the datas list
-manual_datas = en_core_web_sm_data + pvp_data + pyside_core_datas + whisper_datas
+manual_datas = en_core_web_sm_data + pvp_data + pyside_core_datas + whisper_datas + torch_datas
 
 data_files = [
     ("config_data.json", "."),
@@ -113,19 +134,15 @@ data_files = [
 if public:
     data_files = data_files[2:]
 
-binaries = [
-    (sound_c_path, "Frameworks/"),
-]
-
 a = Analysis(
     ["jarvis.py", "audio_player.py", "internet_helper.py", "logger_config.py",
      "streaming_response_audio.py", "animation.py", "connections.py", "processor.py",
      "text_speech.py", "assistant_history.py", "jarvis_interrupter.py", "settings.py",
      "viewer_window.py", "audio_listener.py", "gpt_interface.py", "jarvis_process.py", "settings_menu.py"],
     pathex=[],
-    binaries=binaries,
+    binaries=torch_binaries,
     datas=data_files,
-    hiddenimports=["tqdm"],
+    hiddenimports=["tqdm"]+torch_hiddenimports,
     hookspath=[],
     hooksconfig=[],
     runtime_hooks=[],
@@ -183,3 +200,6 @@ app = BUNDLE(
 if public:
     for file in os.listdir("pico_models_PRIVATE"):
         shutil.copyfile(os.path.join("pico_models_PRIVATE", file), os.path.join("pico_models", file))
+
+if activated_patch:
+    os.rename(ignore_path, torch_hook_path)

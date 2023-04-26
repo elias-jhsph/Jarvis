@@ -5,10 +5,13 @@ This README provides instructions on how to install, set up, and use a simple vo
 ## Installation
 
 1. Clone or download the repository.
-2. Set up the environment using a virtual environment for python 3.10.11 (Make sure to use arm arch if m1 including brew):
+2. Set up the environment using a virtual environment for python (Note more than the following options may work):
+- If you are on an M1 Mac I have tested this code with python 3.10.11 and macOS 13.2.1 (Make sure to use the arm arch for brew)
+- If you are on an Intel Mac I have tested this code with python 3.9.0 and macOS 13.3.1 (The hook-torch.py file is temporarily removed inorder to patch an issue in pyinstaller)
 ```
 brew install portaudio
 brew install ffmpeg
+brew install upx
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```

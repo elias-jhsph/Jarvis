@@ -277,7 +277,6 @@ class JarvisApp(QApplication):
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
-    test_mic()
     logger.info("Starting app...")
     app = JarvisApp(sys.argv)
     app.setQuitOnLastWindowClosed(False)
