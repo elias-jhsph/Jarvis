@@ -12,6 +12,10 @@ if 'DYLD_LIBRARY_PATH' in os.environ:
     os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}:{os.environ['DYLD_LIBRARY_PATH']}"
 else:
     os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
+if getattr(sys, 'frozen', False):
+    # If bundled, set the model path to the bundled directory
+    qt_locals_path = os.path.join(sys._MEIPASS, 'qtwebengine_locales')
+    os.environ['QTWEBENGINE_LOCALES_PATH'] = qt_locals_path
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
@@ -19,7 +23,7 @@ from PySide6.QtGui import QIcon, QAction
 import settings_menu
 import viewer_window
 import connections
-from jarvis_process import jarvis_process
+from jarvis_process import jarvis_process, test_mic
 from jarvis_interrupter import stop_word_detection
 
 import logger_config
@@ -107,7 +111,6 @@ class JarvisApp(QApplication):
         self.ps_interrupter = None
         self.settings = settings_menu.SettingsDialog()
         self.viewer = viewer_window.ChatWindow()
-        self._set_environment()
         self.message_queue = None
         self.chat_queue = None
         self.process_status = None
@@ -260,6 +263,8 @@ class JarvisApp(QApplication):
 
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
+    test_mic()
     logger.info("Starting app...")
     app = JarvisApp(sys.argv)
     app.setQuitOnLastWindowClosed(False)

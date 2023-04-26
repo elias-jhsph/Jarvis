@@ -262,6 +262,11 @@ def test_mic() -> None:
         time.sleep(1)
         stop_audio_stream()
         logger.info("Mic tested.")
+        logger.info("listening...")
+        query_audio = listen_to_user()
+        logger.info("Recognizing...")
+        query = convert_to_text(query_audio)
+        logger.info("Heard: %s", query)
     except ConnectionKeyError as e:
         logger.warning("Could not test mic because pico key is not set.")
     return

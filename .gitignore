@@ -137,3 +137,5 @@ output.wav
 EXCLUDE.py
 connections_INTERNAL.py
 *.log*
+whisper_models
+pico_models_PRIVATE

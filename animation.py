@@ -1,10 +1,10 @@
 import sys
-import pyaudio
-import numpy as np
+import time
+from pyaudio import PyAudio, paInt16, paContinue
+from numpy import zeros, frombuffer, int16, pi, exp, sin
 from PySide6.QtCore import Qt, QTimer, QPoint
 from PySide6.QtGui import QRegion, QColor, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
-import time
 
 
 class JarvisWaveform(QWidget):
@@ -31,7 +31,7 @@ class JarvisWaveform(QWidget):
         average_color = self.calculate_average_color(self.icon)
         self.update_base_wave_colors(average_color)
 
-        self.audio_data = np.zeros(1024)
+        self.audio_data = zeros(1024)
         self.init_audio_stream()
 
         self.timer = QTimer()
@@ -43,8 +43,8 @@ class JarvisWaveform(QWidget):
 
     def init_audio_stream(self):
         """Initialize the audio stream."""
-        self.p = pyaudio.PyAudio()
-        self.stream = self.p.open(format=pyaudio.paInt16, channels=1, rate=44100, input=True, frames_per_buffer=1024,
+        self.p = PyAudio()
+        self.stream = self.p.open(format=paInt16, channels=1, rate=44100, input=True, frames_per_buffer=1024,
                                   stream_callback=self.audio_callback)
 
     def audio_callback(self, in_data, frame_count, time_info, status):
@@ -61,9 +61,9 @@ class JarvisWaveform(QWidget):
         :return: stream status
         :rtype: int
         """
-        audio_data = np.frombuffer(in_data, dtype=np.int16)
+        audio_data = frombuffer(in_data, dtype=int16)
         self.audio_data = audio_data
-        return None, pyaudio.paContinue
+        return None, paContinue
 
     def draw_icon(self, painter, icon, opacity):
         """Draw the icon with the given opacity.
@@ -75,7 +75,7 @@ class JarvisWaveform(QWidget):
         :param opacity: opacity value (0-1)
         :type opacity: float
         """
-        max_amplitude = np.abs(self.audio_data).max() / 32768
+        max_amplitude = abs(self.audio_data).max() / 32768
         scaling_factor = 0.80 + max_amplitude * 0.2
         icon_width = int(self.width() * 0.01)
         icon_height = int(self.height() * 0.01)
@@ -179,7 +179,7 @@ class JarvisWaveform(QWidget):
             max_height = self.height() // 2
             width = self.width()
             num_waves = self.num_waves
-            max_amplitude = np.abs(self.audio_data).max() / 32768
+            max_amplitude = abs(self.audio_data).max() / 32768
             data = self.audio_data
             current_time = time.time() - self.start_time
             wave_start_x = int(self.width() * 0.13)
@@ -190,19 +190,19 @@ class JarvisWaveform(QWidget):
                 painter.setPen(QColor(color))
 
                 for x in range(wave_start_x, wave_end_x):
-                    phase_shift = (i * 15) + (x / 8) + (current_time * 2 * np.pi * (i % 2) / 5)
+                    phase_shift = (i * 15) + (x / 8) + (current_time * 2 * pi * (i % 2) / 5)
                     amplitude = max_amplitude * (num_waves - i) / num_waves
-                    frequency = (2 * np.pi * (i + 1) / width) * 4
+                    frequency = (2 * pi * (i + 1) / width) * 4
 
                     # Adjust the amplitude based on the x-axis position with modified Gaussian scaling factor
-                    scaling_factor = 1.5 * np.exp(-((x / width - 0.5) ** 2) / 0.075)
-                    y = int(amplitude * np.sin(frequency * x + phase_shift) * max_height * scaling_factor)
+                    scaling_factor = 1.5 * exp(-((x / width - 0.5) ** 2) / 0.075)
+                    y = int(amplitude * sin(frequency * x + phase_shift) * max_height * scaling_factor)
 
                     # Add vertical offset to each wave
-                    vertical_offset = int((np.sin(current_time + i * np.pi / num_waves) * max_height * 0.1) - 0.25)
+                    vertical_offset = int((sin(current_time + i * pi / num_waves) * max_height * 0.1) - 0.25)
 
                     # Add curvature to the wave lines
-                    curvature_offset = int(np.sin(x * (1 + i) / 100) * max_height * 0.05)
+                    curvature_offset = int(sin(x * (1 + i) / 100) * max_height * 0.05)
 
                     painter.drawLine(x, max_height - y + vertical_offset + curvature_offset, x,
                                      max_height + y + vertical_offset + curvature_offset)

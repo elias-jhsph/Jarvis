@@ -135,62 +135,63 @@ class AssistantHistory:
             self.history = self.client.get_or_create_collection(name="history")
             self.summaries = self.client.get_or_create_collection(name="summaries")
 
-        # Check whether the next summary ID is in the history database.
-        expected_summaries = ((self.next_id - 1) / 2)
-        if expected_summaries > self.next_summary_id - 1 and self.to_summarize is None:
-            warnings.warn(
-                "Summary ID number is less than expected. Adding last two entries to summary queue."
-            )
-            last_two = self.get_history_from_id_and_earlier(n_results=2)
-            self.to_summarize = (last_two[1], last_two[0])
-            self.save_metadata()
-
-        # Delete extra summaries if the next summary ID is greater than the expected number of summaries.
-        expected_history = ((self.next_summary_id - 1) * 2)
-        if expected_history > self.next_id - 1:
-            warnings.warn(
-                "History ID number is less than expected. Attempting to fix."
-            )
-            while expected_history > self.next_id - 1:
-                expected_history = ((self.next_summary_id - 1) * 2)
-                self.summaries.delete([str(self.next_summary_id - 1)])
-                self.next_summary_id -= 1
-            self.save_metadata()
-        self.current_user_query = None
-
-        # Check whether the next summary ID is in the summaries database.
-        # If it's not, attempt to fix by decrementing the ID until a valid summary is found.
-        # Also, check whether the next ID is in the history database.
-        # If it's not, decrement the ID until a valid entry is found.
-        check_summary = self.summaries.get([str(self.next_summary_id - 1)], include=["documents", "metadatas"])
-        if len(check_summary["ids"]) == 0:
-            warnings.warn(
-                "Summary ID is not in the database. "
-                "This is likely because the database was not properly closed. Attempting to fix."
-            )
-            found = False
-            while not found:
-                history_check = self.history.get([str(self.next_id - 1)], include=["documents", "metadatas"])
-                if len(history_check["ids"]) == 0:
-                    self.next_id -= 1
-                    metadata["current_id"] = str(self.next_id - 1)
-                else:
-                    found = True
-            found = False
-            while not found:
-                summary_check = self.summaries.get([str(self.next_summary_id - 1)], include=["documents", "metadatas"])
-                if len(summary_check["ids"]) == 0:
-                    self.next_summary_id -= 1
-                    metadata["current_summary_id"] = str(self.next_summary_id - 1)
-                else:
-                    found = True
-            if not str(self.next_id - 1) in summary_check["metadatas"][0]["source_ids"].split(","):
+        if self.next_id > 1:
+            # Check whether the next summary ID is in the history database.
+            expected_summaries = ((self.next_id - 1) / 2)
+            if expected_summaries > self.next_summary_id - 1 and self.to_summarize is None:
+                warnings.warn(
+                    "Summary ID number is less than expected. Adding last two entries to summary queue."
+                )
                 last_two = self.get_history_from_id_and_earlier(n_results=2)
                 self.to_summarize = (last_two[1], last_two[0])
-            else:
-                self.to_summarize = None
-            metadata["to_summarize"] = self.to_summarize
-            self.save_metadata()
+                self.save_metadata()
+
+            # Delete extra summaries if the next summary ID is greater than the expected number of summaries.
+            expected_history = ((self.next_summary_id - 1) * 2)
+            if expected_history > self.next_id - 1:
+                warnings.warn(
+                    "History ID number is less than expected. Attempting to fix."
+                )
+                while expected_history > self.next_id - 1:
+                    expected_history = ((self.next_summary_id - 1) * 2)
+                    self.summaries.delete([str(self.next_summary_id - 1)])
+                    self.next_summary_id -= 1
+                self.save_metadata()
+            self.current_user_query = None
+
+            # Check whether the next summary ID is in the summaries database.
+            # If it's not, attempt to fix by decrementing the ID until a valid summary is found.
+            # Also, check whether the next ID is in the history database.
+            # If it's not, decrement the ID until a valid entry is found.
+            check_summary = self.summaries.get([str(self.next_summary_id - 1)], include=["documents", "metadatas"])
+            if len(check_summary["ids"]) == 0:
+                warnings.warn(
+                    "Summary ID is not in the database. "
+                    "This is likely because the database was not properly closed. Attempting to fix."
+                )
+                found = False
+                while not found:
+                    history_check = self.history.get([str(self.next_id - 1)], include=["documents", "metadatas"])
+                    if len(history_check["ids"]) == 0:
+                        self.next_id -= 1
+                        metadata["current_id"] = str(self.next_id - 1)
+                    else:
+                        found = True
+                found = False
+                while not found:
+                    summary_check = self.summaries.get([str(self.next_summary_id - 1)], include=["documents", "metadatas"])
+                    if len(summary_check["ids"]) == 0:
+                        self.next_summary_id -= 1
+                        metadata["current_summary_id"] = str(self.next_summary_id - 1)
+                    else:
+                        found = True
+                if not str(self.next_id - 1) in summary_check["metadatas"][0]["source_ids"].split(","):
+                    last_two = self.get_history_from_id_and_earlier(n_results=2)
+                    self.to_summarize = (last_two[1], last_two[0])
+                else:
+                    self.to_summarize = None
+                metadata["to_summarize"] = self.to_summarize
+                self.save_metadata()
 
     def reload_from_disk(self):
         """

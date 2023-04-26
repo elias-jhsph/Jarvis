@@ -1,12 +1,11 @@
 import threading
-
 import requests
 from bs4 import BeautifulSoup
 import openai
 from connections import get_openai_key, get_google, get_google_cx, ConnectionKeyError
 from googleapiclient.discovery import build
 from googlesearch import search as google_search
-import tiktoken
+from tiktoken import encoding_for_model
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -19,13 +18,13 @@ except ConnectionKeyError:
     logger.warning("OpenAI key not found!")
 base_model = "text-davinci-003"
 chat_model = "gpt-3.5-turbo"
-enc = tiktoken.encoding_for_model(base_model)
+enc = encoding_for_model(base_model)
 
 # Set up Google API
 try:
     free = False
     cx = get_google_cx()
-    service = build("customsearch", "v1", developerKey=get_google())
+    service = build("customsearch", "v1", developerKey=get_google(), static_discovery=False)
 except ConnectionKeyError:
     free = True
 

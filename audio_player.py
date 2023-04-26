@@ -6,7 +6,7 @@ import time
 import threading
 import wave
 import struct
-import numpy as np
+from numpy import linspace, int16, sqrt, maximum, mean, square, frombuffer
 
 # Configure logging
 import logger_config
@@ -56,7 +56,7 @@ pa = pyaudio.PyAudio()
 audio_stream = None
 
 
-def play_audio_file(file_path, blocking: bool = True, loops=0, delay: float = 0, destroy=False,
+def play_audio_file(file_path, blocking: bool = True, loops=1, delay: float = 0, destroy=False,
                     added_stop_event: threading.Event = None) -> threading.Event:
     """
     Play an audio file using pyaudio.
@@ -80,6 +80,7 @@ def play_audio_file(file_path, blocking: bool = True, loops=0, delay: float = 0,
 
     if blocking:
         time.sleep(delay)
+        print(file_path, stop_event, loops, 0, destroy, added_stop_event)
         _play_audio_file_blocking(file_path, stop_event, loops, 0, destroy, added_stop_event)
     else:
         playback_thread = threading.Thread(target=_play_audio_file_blocking,
@@ -176,11 +177,11 @@ def fade_out(data: bytes, fade_duration: int, rms_threshold: int = 1000) -> byte
     """
 
     def rms(aud_data):
-        return np.sqrt(np.maximum(np.mean(np.square(aud_data)), 0))
+        return sqrt(maximum(mean(square(aud_data)), 0))
 
     num_samples = len(data) // 2  # Divide by 2 for 16-bit audio samples
     fade_samples = min(num_samples, fade_duration)
-    audio_data = np.frombuffer(data, dtype=np.int16).copy()  # Create a writeable copy of the array
+    audio_data = frombuffer(data, dtype=int16).copy()  # Create a writeable copy of the array
 
     start_fade = 0
     for i in range(0, num_samples - fade_samples, fade_samples):
@@ -188,7 +189,7 @@ def fade_out(data: bytes, fade_duration: int, rms_threshold: int = 1000) -> byte
             start_fade = i
             break
 
-    fade = np.linspace(1, 0, num_samples - start_fade).astype(np.int16)  # Convert fade array to int16
+    fade = linspace(1, 0, num_samples - start_fade).astype(int16)  # Convert fade array to int16
     audio_data[start_fade:] *= fade
     return audio_data.tobytes()
 

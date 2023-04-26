@@ -1,23 +1,25 @@
+import os
+import sys
 import queue
 import threading
 import time
 import wave
 import io
-import numpy as np
-import pyaudio
-import spacy
 import warnings
 from queue import Queue
+from numpy import frombuffer, int16
+from pyaudio import PyAudio, paInt16
+import en_core_web_sm
 from typing import Iterator, Dict, Tuple, Optional
 from text_speech import text_to_speech, TextToSpeechError
 
 warnings.filterwarnings("ignore", category=UserWarning, module="spacy.pipeline.lemmatizer", lineno=211)
 
-nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "ner"])
+nlp = en_core_web_sm.load(disable=["tagger", "parser", "ner"])
 nlp.add_pipe("sentencizer")
 
 CHUNK = 8196
-FORMAT = pyaudio.paInt16
+FORMAT = paInt16
 CHANNELS = 1
 RATE = 16000
 
@@ -60,7 +62,7 @@ class SpeechStreamer:
         self.thread.daemon = True
         self.thread.start()
         self.stream = None
-        self.py_audio = pyaudio.PyAudio()
+        self.py_audio = PyAudio()
         self.stop_event = threading.Event()
         self.skip = skip
         self.audio_count = 0
@@ -93,7 +95,7 @@ class SpeechStreamer:
             if not self.playing:
                 self.playing = True
                 if self.stream is None:
-                    self.stream = self.py_audio.open(format=pyaudio.paInt16,
+                    self.stream = self.py_audio.open(format=paInt16,
                                                      channels=CHANNELS,
                                                      rate=sample_rate,
                                                      output=True,
@@ -185,7 +187,7 @@ class SpeechStreamer:
             audio_data = wav_file.readframes(n_frames)
 
         # Convert audio data to numpy array
-        np_audio_data = np.frombuffer(audio_data, dtype=np.int16)
+        np_audio_data = frombuffer(audio_data, dtype=int16)
 
         def generator():
             for i in range(0, len(np_audio_data), CHUNK):
