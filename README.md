@@ -3,7 +3,7 @@
 This README provides instructions on how to install, set up, and use a simple voice assistant app built using Python. The app listens for commands and performs various tasks using a voice recognition system that responds to the wake word "Jarvis." Once activated, the app processes natural language queries to chatGPT and understands some custom commands, allowing you to perform actions such as sending query results and reminders to your email, searching the internet, or emailing you an internet search report.
 
 ## Installation
-
+If you want to download a .dmg file without any API keys in it you can download them from this Drive folder -> https://drive.google.com/drive/folders/1gBap6phnbj_GMxM7oLueI_UmxAVjEsb-?usp=sharing
 1. Clone or download the repository.
 2. Set up the environment using a virtual environment for python (Note - more than the following options may work):
 - If you are on an M1 Mac I have tested this code with python 3.10.11 and macOS 13.2.1 (Make sure to use the arm arch for brew)
