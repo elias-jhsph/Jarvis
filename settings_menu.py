@@ -23,7 +23,7 @@ class SettingsDialog(QDialog):
         self.list_widget = QListWidget()
         self.list_widget.itemClicked.connect(self.handle_click)
         self.set_list_widget_style()
-        self.setMinimumSize(350, 500)
+        self.setMinimumSize(350, 530)
 
         choices = [
             'Set User',
@@ -70,7 +70,7 @@ class SettingsDialog(QDialog):
             'Set Pico API Key (Optional)': 'set_pico_key',
             'Set Pico Path to wake word .ppn (Optional)': 'set_pico_wake_path',
             'Set Pico Path to stop word .ppn (Optional)': 'set_pico_stop_path',
-            'Set Google Key and CX (Optional)': 'set_google_key_and_ck',
+            'Set Google Key and CX (Optional)': 'set_google_key_and_cx',
             'Set GCP JSON Path (Recommended)': 'set_gcp_data'
         }
 
@@ -124,7 +124,7 @@ class SettingsDialog(QDialog):
             'Set Pico API Key (Optional)': set_pico_key,
             'Set Pico Path to wake word .ppn (Optional)': set_pico_wake_path,
             'Set Pico Path to stop word .ppn (Optional)': set_pico_stop_path,
-            'Set Google Key and CX (Optional)': set_google_key_and_ck,
+            'Set Google Key and CX (Optional)': set_google_key_and_cx,
             'Set GCP JSON Path (Recommended)': set_gcp_data
         }
 
@@ -134,13 +134,17 @@ class SettingsDialog(QDialog):
                 if path:
                     function_mapping[choice](path)
             elif choice == 'Set Mailjet Key and Secret (Optional)':
-                value_key, ok_key = QInputDialog.getText(self, "Enter your Mailjet Key:", "")
-                value_secret, ok_secret = QInputDialog.getText(self, "Enter your Mailjet Secret:", "")
+                value_key, ok_key = QInputDialog.getText(self, "Update Mailjet Key",
+                                                         "Enter your Mailjet key:          ")
+                value_secret, ok_secret = QInputDialog.getText(self, "Update Mailjet Secret",
+                                                               "Enter your Mailjet Secret:          ")
                 if ok_key and ok_secret:
                     function_mapping[choice](value_key, value_secret)
             elif choice == 'Set Google Key and CX (Optional)':
-                value_key, ok_key = QInputDialog.getText(self, "Enter your Google Key:", "")
-                value_secret, ok_secret = QInputDialog.getText(self, "Enter your Google CX:", "")
+                value_key, ok_key = QInputDialog.getText(self, "Update Google Key",
+                                                         "Enter your Google Key:          ")
+                value_secret, ok_secret = QInputDialog.getText(self, "Update Google CX",
+                                                               "Enter your Google CX:          ")
                 if ok_key and ok_secret:
                     function_mapping[choice](value_key, value_secret)
             else:
@@ -170,6 +174,7 @@ class SettingsDialog(QDialog):
         """
         event.ignore()
         self.hide()
+        self.warning_label.setVisible(False)
 
 
 if __name__ == "__main__":

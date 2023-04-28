@@ -64,19 +64,19 @@ def refine_query(query: str) -> str:
     response = openai.ChatCompletion.create(
         model=chat_model,
         messages=[{"role": "user", "content":
-            f"Please help me improve this search query for better results: '{query}'. Add context and keywords you "
-            "think help better capture the idea behind the query. The response you send "
-            "will go directly into google. Here is a helpful reminder of google tools you can use but consider "
-            "not using them if you don't think you need them. Make sure some keywords aren't in quotes or you risk "
-            "only getting results with those exact words in that order:\n\n"
-            'Quotes (""): Use quotes to search for an exact phrase or word order.\n'
-            "Minus (-): Exclude a specific word from your search.\n"
-            "Asterisk (*): Use as a placeholder for unknown words.\n"
-            "OR: Search for multiple terms or phrases.\n"
-            "intitle: (intitle:): Search for words specifically in the title of webpages.\n"
-            "intext: (intext:): Search for words specifically in the body of webpages.\n"
-            "Note: Do not be so specific in your search that you miss the general point of the query. Also "
-            "DO NOT SURROUND THE ENTIRE QUERY BY QUOTES.\n Query:"}],
+                   f"Please help me improve this search query for better results: '{query}'. Add context and keywords "
+                   "you think help better capture the idea behind the query. The response you send will go directly "
+                   "into google. Here is a helpful reminder of google tools you can use but consider not using them "
+                   "if you don't think you need them. Make sure some keywords aren't in quotes or you risk "
+                   "only getting results with those exact words in that order:\n\n"
+                   'Quotes (""): Use quotes to search for an exact phrase or word order.\n'
+                   "Minus (-): Exclude a specific word from your search.\n"
+                   "Asterisk (*): Use as a placeholder for unknown words.\n"
+                   "OR: Search for multiple terms or phrases.\n"
+                   "intitle: (intitle:): Search for words specifically in the title of webpages.\n"
+                   "intext: (intext:): Search for words specifically in the body of webpages.\n"
+                   "Note: Do not be so specific in your search that you miss the general point of the query. Also "
+                   "DO NOT SURROUND THE ENTIRE QUERY BY QUOTES.\n Query:"}],
         max_tokens=80,
         n=1,
         temperature=0.8,
@@ -311,25 +311,32 @@ def generate_final_prompt(simplified_output: dict, max_tokens: int = 1800) -> st
          for i, summary in enumerate(ranked_summaries)]
     )
 
-    prompt = (
-        f"The user has requested a response to the following query {user_query}. "
-        f"An AI language model working with you has conducted an internet search for '{refined_query}' "
-        f"which was based on the previous user query. "
+    pre_prompt = (
+        f"The user has requested a response to the following query '{user_query}'.\n"
+        f"An AI language model working with you has conducted an internet search for '{refined_query}', "
+        f"which was based on the provided user query. "
         f"It has synthesized the following information from the search results: '{synthesized_information}'. "
-        f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text}\n\n"
-        f"Please analyze these results and provide the most appropriate response to the User. "
-        f"Consider the following options: "
+        f"Here are the ranked summaries of the top search results:\n\n"
+    )
+
+    post_prompt = (
+        f"\n\n"
+        f"Please analyze these results and provide the most appropriate response to the User.\n"
+        f"Consider the following options:\n"
         f"1. Pass along the final summary\n"
         f"2. Provide a very short final answer\n"
         f"3. Suggest specific websites for further reading\n"
         f"4. Recommend a deeper search or further inquiry\n"
         f"5. Offer color commentary on the findings\n"
         f"6. Combine any of the above options.\n"
-        f"NOTE: Give me the exact response that you would have me give the user. DO NOT mention which approach you"
-        f"chose. Give the response exactly as you would give it to the end user.\n"
-        f"Remember - the user doesn't have access to the results above so any text you want to refer from above "
-        f"you must reiterate it for the user! And don't forget your first system message (NO FULL URLS)! Good luck!"
+        f"NOTE: Provide the exact response that you would have me give the user. DO NOT mention which approach you "
+        f"have chosen. Give your response exactly as you would give it to the end user.\n\n"
+        f"Remember the user doesn't have access to the results above, so any text you want to refer to from above "
+        f"you must reiterate that information to the user in your own words! "
+        f"And don't forget your first system message (NO FULL URLS)! Good luck!"
     )
+
+    prompt = pre_prompt + ranked_summaries_text + post_prompt
 
     tokens = enc.encode(prompt)
     if len(tokens) > max_tokens:
@@ -337,25 +344,7 @@ def generate_final_prompt(simplified_output: dict, max_tokens: int = 1800) -> st
         new = enc.encode(ranked_summaries_text)
         if len(new) < diff+10:
             raise Exception("Could not shrink internet final prompt within limit!")
-        prompt = (
-            f"The user has requested a response to the following query {user_query}. "
-            f"An AI language model working with you has conducted an internet search for '{refined_query}' "
-            f"which was based on the previous user query. "
-            f"It has synthesized the following information from the search results: '{synthesized_information}'. "
-            f"Here are the ranked summaries of the top search results:\n{ranked_summaries_text[:-(diff+10)]}\n\n"
-            f"Please analyze these results and provide the most appropriate response to the User. "
-            f"Consider the following options: "
-            f"1. Pass along the final summary\n"
-            f"2. Provide a very short final answer\n"
-            f"3. Suggest specific websites for further reading\n"
-            f"4. Recommend a deeper search or further inquiry\n"
-            f"5. Offer color commentary on the findings\n"
-            f"6. Combine any of the above options.\n"
-            f"NOTE: Give me the exact response that you would have me give the user. DO NOT mention which approach you"
-            f"chose. Give the response exactly as you would give it to the end user.\n"
-            f"Remember - the user doesn't have access to the results above so any text you want to refer from above "
-            f"you must reiterate it for the user! And don't forget your first system message (NO FULL URLS)! Good luck!"
-        )
+        prompt = pre_prompt + ranked_summaries_text[:-(diff+10)] + post_prompt
     return prompt
 
 
