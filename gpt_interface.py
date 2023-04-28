@@ -30,7 +30,7 @@ models = {"primary": {"name": "gpt-4",
           "requests": [],
           "fall_back": {"name": "gpt-3.5-turbo-0301",
                         "max_message": 800,
-                        "max_history": 2800,
+                        "max_history": 2600,
                         "temperature": 0.8,
                         "top_p": 1,
                         "frequency_penalty": 0.19,
@@ -39,7 +39,6 @@ models = {"primary": {"name": "gpt-4",
 
 # Global variables
 history_changed = False
-history_path = "history.json"
 try:
     openai.api_key = get_openai_key()
 except ConnectionKeyError:
@@ -134,13 +133,18 @@ system = "You are FIXED_USER_INJECTION AI Voice Assistant named Jarvis. Keep in 
 
 
 # Load Assistant History
-history_access = AssistantHistory(get_user(), system, tokenizer, summarizer,
-                                  models["primary"]["max_history"], embedder=openai_embedder)
+history_access = AssistantHistory(get_user(), system, tokenizer, summarizer, models["primary"]["max_history"],
+                                  models["fall_back"]["max_history"], embedder=openai_embedder)
 
 
 def get_model(error=False):
     """
     Returns the model to use for the next query.
+
+    :param error: Whether the last query resulted in an error.
+    :type error: bool
+    :return: The model to use for the next query.
+    :rtype: dict
     """
     global models
     global history_access
@@ -159,6 +163,8 @@ def log_model(model):
     Logs the model used for the last query.
 
     :param model: The model used for the last query.
+    :type model: str
+    :return: None
     """
     global models
     if model == models["primary"]["name"]:
@@ -237,16 +243,16 @@ def generate_response(query, query_history_role="user", query_role="user"):
     log_model(model["name"])
     if reason != "stop":
         if reason == "length":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model["name"])
             return output + "... I'm sorry, I have been going on and on haven't I?"
         if reason == "null":
             history_access.reset_add()
             return "I'm so sorry I got overwhelmed, can you put that more simply?"
         if reason == "content_filter":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model["name"])
             output = "I am so sorry, but if I responded to that I would have been forced to say something naughty."
     else:
-        history_access.add_assistant_response(output)
+        history_access.add_assistant_response(output, model["name"])
     schedule_refresh_assistant()
     return output
 
@@ -257,7 +263,8 @@ def generate_simple_response(history):
 
     :param history: The user's input query.
     :type history: list
-    :return: The AI Assistant's response.
+    :return: The AI Assistant's response and the reason for stopping.
+    :rtype: tuple
     """
     model = get_model()
     try:
@@ -299,7 +306,7 @@ def stream_response(query, query_history_role="user", query_role="user"):
     :param query_history_role: defaults to "user" but can be "assistant" or "system"
     :type query_history_role: str
     :return: The AI Assistant's response.
-    :rtype: str
+    :rtype: dict
     """
     safe_wait()
     history_access.add_user_query(query, role=query_history_role)
@@ -331,7 +338,7 @@ def stream_response(query, query_history_role="user", query_role="user"):
         )
 
 
-def resolve_stream_response(output, reason):
+def resolve_stream_response(output, reason, model):
     """
     stream a response to the given query.
 
@@ -339,19 +346,23 @@ def resolve_stream_response(output, reason):
     :type output: str
     :param reason: The reason the response was ended.
     :type reason: str
+    :param model: The model used to generate the response.
+    :type model: str
+    :return: The AI Assistant's text response.
+    :rtype: str
     """
     if reason != "stop":
         if reason == "length":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model)
             return output
         if reason == "null":
             history_access.reset_add()
             return output
         if reason == "content_filter":
-            history_access.add_assistant_response(output)
+            history_access.add_assistant_response(output, model)
             return output
     else:
-        history_access.add_assistant_response(output)
+        history_access.add_assistant_response(output, model)
     schedule_refresh_assistant()
     return output
 
@@ -360,6 +371,8 @@ def schedule_refresh_assistant():
     """
     This function runs the refresh_history function in the background to prevent
     blocking the main thread while updating the conversation history.
+
+    :return: None
     """
     global executor, tasks, history_changed
     history_changed = True
@@ -371,15 +384,27 @@ def get_last_response():
     """
     Get the last response in the conversation history.
 
-    :return: A tuple containing the last user query and the last AI Assistant response.
-    :rtype: tuple
+    :return: A list containing the last user query and the last AI Assistant response.
+    :rtype: list
     """
-    return history_access.get_history()[-1]
+    return history_access.get_history_from_id_and_earlier(n_results=2)
+
+
+def get_chat_db():
+    """
+    Get the chat database.
+
+    :return: The chat database.
+    :rtype: collection
+    """
+    return history_access
 
 
 def safe_wait():
     """
     Waits until all scheduled tasks are completed to run
+
+    :return: None
     """
     global tasks
     if tasks:
@@ -393,6 +418,8 @@ def safe_wait():
 def shutdown_executor():
     """
     Helps with grateful shutdown of executor in case of termination
+
+    :return: None
     """
     global executor
     if executor is not None:

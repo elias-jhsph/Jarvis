@@ -4,23 +4,42 @@ import time
 import threading
 import multiprocessing
 import atexit
-from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PyQt6.QtGui import QIcon, QAction
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+lib_dir = os.path.join(current_dir, '..', 'Frameworks')
+numpy_dir = os.path.join(current_dir, 'Resources', 'lib', 'python3.10', 'numpy', '.dylibs')
+if 'DYLD_LIBRARY_PATH' in os.environ:
+    os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}:{os.environ['DYLD_LIBRARY_PATH']}"
+else:
+    os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
+if getattr(sys, 'frozen', False):
+    # If bundled, set the model path to the bundled directory
+    qt_locals_path = os.path.join(sys._MEIPASS, 'qtwebengine_locales')
+    os.environ['QTWEBENGINE_LOCALES_PATH'] = qt_locals_path
+
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
+from PySide6.QtGui import QIcon, QAction
 import settings_menu
+import viewer_window
 import connections
-from jarvis_process import jarvis_process
+from jarvis_process import jarvis_process, test_mic
+from jarvis_interrupter import stop_word_detection
 
 import logger_config
 
 logger = logger_config.get_logger()
 
 
-def clean_up_files():
+def clean_up_files() -> None:
     """
-    Clean up files from previous runs.
-    :return:
+    Clean up audio and email files from previous runs.
+
+    :return: None
     """
     folder = "audio_output"
+    if getattr(sys, 'frozen', False):
+        folder = os.path.join(sys._MEIPASS, folder)
     if not os.path.exists(folder):
         os.makedirs(folder)
     for filename in os.listdir(folder):
@@ -32,6 +51,8 @@ def clean_up_files():
         except Exception as e:
             logger.exception(f"Error deleting file: {file_path}. Reason: {e}")
     folder = "email_drafts"
+    if getattr(sys, 'frozen', False):
+        folder = os.path.join(sys._MEIPASS, folder)
     if not os.path.exists(folder):
         os.makedirs(folder)
     for filename in os.listdir(folder):
@@ -45,16 +66,23 @@ def clean_up_files():
 
 
 class JarvisApp(QApplication):
+    """
+    Main application class for Jarvis.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        logger.info("CWD "+os.getcwd())
+        logger.info("CWD " + os.getcwd())
         self.config = {
             "app_name": "Jarvis",
             "start": "Start Listening",
             "stop": "Stop Listening",
             "quit": "Quit",
+            "settings": "Settings",
             "break_message": "Stopped",
+            "interrupt": "Jarvis, Stop.",
+            "viewer": "Live Chat / History",
         }
+        self.codes = connections.get_connection_ring()
 
         self.menu = QMenu()
 
@@ -62,9 +90,17 @@ class JarvisApp(QApplication):
         self.start_stop_action.triggered.connect(self.start_stop_listener)
         self.menu.addAction(self.start_stop_action)
 
-        self.settings_action = QAction("Settings", self)
+        self.interrupt_action = QAction(self.config["interrupt"], self)
+        self.interrupt_action.triggered.connect(self.interrupt_listener)
+        self.menu.addAction(self.interrupt_action)
+
+        self.settings_action = QAction(self.config["settings"], self)
         self.settings_action.triggered.connect(self.settings_listener)
         self.menu.addAction(self.settings_action)
+
+        self.viewer_action = QAction(self.config["viewer"], self)
+        self.viewer_action.triggered.connect(self.viewer_listener)
+        self.menu.addAction(self.viewer_action)
 
         self.quit_action = QAction(self.config["quit"], self)
         self.quit_action.triggered.connect(self.quit_listener)
@@ -72,72 +108,85 @@ class JarvisApp(QApplication):
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setContextMenu(self.menu)
 
-        # Your initialization code
+        # Initialize variables
         self.strobe_speed = 1
         self.strobe_fast_speed = 0.5
         self.ps = None
-        self.settings = None
-        self._set_environment()
+        self.ps_interrupter = None
+        self.settings = settings_menu.SettingsDialog()
+        self.viewer = viewer_window.ChatWindow()
         self.message_queue = None
+        self.chat_queue = None
         self.process_status = None
         self.stop_event = multiprocessing.Event()
+        self.skip_event = multiprocessing.Event()
         self.icon_thread = None
+        self.animation_thread = None
         clean_up_files()
         atexit.register(self.cleanup)
         logger.info("Ready!")
-        self.icon = os.path.join(os.getcwd(), "icon.icns")
+        self.prefix_path = ""
+        if getattr(sys, 'frozen', False):
+            self.prefix_path = sys._MEIPASS + "/"
+        self.icon = self.prefix_path + "icons/icon.icns"
         self.tray_icon.setIcon(QIcon(self.icon))
         self.tray_icon.setVisible(True)
         self.tray_icon.show()
 
-    def settings_listener(self):
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(lambda: self.viewer.jarvis_waveform.update_icon_path(self.icon))
+        self.update_timer.start(300)
+
+    def settings_listener(self) -> None:
         """Opens the settings pop-up menu."""
-        if self.settings is None:
-            self.settings = settings_menu.SettingsDialog()
-            self.settings.finished.connect(self.on_settings_closed)
+        if not self.settings.isVisible():
+            self.settings.update_item_colors()
             self.settings.show()
+            self.settings.raise_()
         else:
-            if not self.settings.isVisible():
-                self.settings.show()
+            self.settings.raise_()
 
-    def on_settings_closed(self):
+    def viewer_listener(self) -> None:
+        """Opens the settings pop-up menu."""
+        if not self.viewer.isVisible():
+            self.viewer.show()
+            self.viewer.raise_()
+        else:
+            self.viewer.raise_()
+
+    def on_settings_closed(self) -> None:
+        """Updates the settings when the settings pop-up menu is closed."""
         self.settings = None
+        self.settings = connections.get_connection_ring()
 
-    def _set_environment(self):
-        """Sets the environment for the Jarvis process."""
-        logger.info("Setting environment")
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        lib_dir = os.path.join(current_dir, '..', 'Frameworks')
-        numpy_dir = os.path.join(current_dir, 'Resources', 'lib', 'python3.10', 'numpy', '.dylibs')
+    def interrupt_listener(self) -> None:
+        """Interrupts the current process."""
+        logger.info("Interrupting process")
+        self.skip_event.set()
 
-        if 'DYLD_LIBRARY_PATH' in os.environ:
-            os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}:{os.environ['DYLD_LIBRARY_PATH']}"
-        else:
-            os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
-
-    def flash_icon(self):
-        default_icon = os.path.join(os.getcwd(), "icons/icon.icns")
+    def flash_icon(self) -> None:
+        default_icon = self.prefix_path + "icons/icon.icns"
         while self.message_queue is not None:
             if not self.message_queue.empty():
                 self.process_status = self.message_queue.get()
-
             if self.process_status == "standby":
+                self.skip_event.clear()
                 if self.icon == default_icon:
-                    self.icon = os.path.join(os.getcwd(), "icons/listening.icns")  # Change to the second icon
+                    self.icon = self.prefix_path + "icons/listening.icns"  # Change to the second icon
                 else:
                     self.icon = default_icon  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "listening":
-                self.icon = os.path.join(os.getcwd(), "icons/listening.icns")  # Change back to the first icon
+                self.icon = self.prefix_path + "icons/listening.icns"  # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
             elif self.process_status == "processing":
-                if self.icon == os.path.join(os.getcwd(), "icons/processing_middle.icns"):
-                    self.icon = os.path.join(os.getcwd(), "icons/processing_small.icns")
+                if self.icon == self.prefix_path + "icons/processing_middle.icns":
+                    self.icon = self.prefix_path + "icons/processing_small.icns"
                     # Change to the second icon
                 else:
-                    self.icon = os.path.join(os.getcwd(), "icons/processing_middle.icns")
+                    self.icon = self.prefix_path + "icons/processing_middle.icns"
                     # Change back to the first icon
                 self.tray_icon.setIcon(QIcon(self.icon))
                 time.sleep(self.strobe_speed)
@@ -152,34 +201,41 @@ class JarvisApp(QApplication):
         self.tray_icon.setIcon(QIcon(self.icon))
         logger.info("Exiting icon thread")
 
-    def start_stop_listener(self):
+    def start_stop_listener(self) -> None:
         """Starts or continues the listening process."""
         if self.start_stop_action.text() == self.config["start"]:
             if self.ps is None or not self.ps.is_alive():
+                self.settings.warning_label.setVisible(False)
                 logger.info("Starting listener")
                 logger.info("Booting process...")
                 self.message_queue = multiprocessing.Queue()
                 self.icon_thread = threading.Thread(target=self.flash_icon)
                 self.icon_thread.daemon = True
                 self.icon_thread.start()
+                self.chat_queue = multiprocessing.Queue()
                 self.stop_event = multiprocessing.Event()
                 self.ps = multiprocessing.Process(target=jarvis_process,
-                                                  args=([self.stop_event, self.message_queue,
-                                                         connections.get_connection_ring()]))
+                                                  args=([self.stop_event, self.skip_event,
+                                                         self.message_queue, self.chat_queue]))
+                self.ps_interrupter = multiprocessing.Process(target=stop_word_detection,
+                                                              args=([self.stop_event, self.skip_event]))
+                self.viewer.attach_queue(self.chat_queue)
                 self.ps.start()
-            self.start_stop_action.setText(self.config["stop"])
+                self.ps_interrupter.start()
+                self.start_stop_action.setText(self.config["stop"])
         else:
+            self.settings.warning_label.setVisible(False)
             self._safe_kill()
             self.start_stop_action.setText(self.config["start"])
 
-    def quit_listener(self):
+    def quit_listener(self) -> None:
         """Quits the application."""
         logger.info("Trying to quit application")
         self.cleanup()
         logger.info("Goodbye")
         self.quit()
 
-    def _safe_kill(self):
+    def _safe_kill(self) -> None:
         if self.ps is not None and self.ps.is_alive():
             self.stop_event.set()
             self.message_queue.put("goodbye")
@@ -194,12 +250,23 @@ class JarvisApp(QApplication):
                     logger.info("Medium killed!")
             else:
                 logger.info("Safe killed!")
+            if self.ps_interrupter.is_alive():
+                self.ps_interrupter.terminate()
+                time.sleep(1)
+                if self.ps_interrupter.is_alive():
+                    self.ps_interrupter.kill()
+                    logger.info("Hard killed interrupter!")
+                else:
+                    logger.info("Medium killed interrupter!")
             self.message_queue = None
+            self.chat_queue = None
             self.process_status = None
+            time.sleep(1)
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Cleans up resources."""
         self._safe_kill()
+        self.viewer.jarvis_waveform.force_close()
         logger.info("Cleaning up resources")
         if self.message_queue is not None:
             self.message_queue.close()
@@ -209,6 +276,7 @@ class JarvisApp(QApplication):
 
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
     logger.info("Starting app...")
     app = JarvisApp(sys.argv)
     app.setQuitOnLastWindowClosed(False)

@@ -9,8 +9,8 @@
 #         { "x": 140, "y": 165, "type": "file", "path": "dist/Jarvis.app" },
 #         { "x": 480, "y": 165, "type": "link", "path": "/Applications" }
 #     ],
-#     "volume_size": "3g",
-#     "size": "3g"
+#     "volume_size": "5g",
+#     "size": "5g"
 # }
 import os.path
 import plistlib
@@ -59,7 +59,7 @@ format = defines.get("format", "UDBZ")  # noqa: F821
 # compression_level = 9
 
 # Volume size
-size = defines.get("size", "3g")  # noqa: F821
+size = defines.get("size", "5g")  # noqa: F821
 
 # Files to include
 files = [application]

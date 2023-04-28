@@ -1,38 +1,44 @@
 import datetime
 import json
-import re
 import os
+import re
+import sys
+import warnings
+from typing import List
+
 import chromadb
 from chromadb.config import Settings
 
 
-def get_time():
+def get_time() -> tuple:
     """
     Get the current time as a string.
 
-    :return: A string containing the current time and a string containing the current UTC time.
+    :return: A tuple containing two strings: the current time and the current UTC time.
     :rtype: tuple
     """
-    return "On " + datetime.datetime.now().strftime("%A, %B %-d, %Y at %-I:%M %p") + ": ", \
-        str(datetime.datetime.utcnow())
+    return (
+        f"On {datetime.datetime.now().strftime('%A, %B %-d, %Y at %-I:%M %p')}: ",
+        str(datetime.datetime.utcnow()),
+    )
 
 
-def _strip_entry(entry):
+def _strip_entry(entry: dict):
     """
     Remove all fields from the entry dictionary except 'role' and 'content'.
+
     :param entry: A dictionary containing a conversation entry.
     :type entry: dict
     :return: A new dictionary containing only the 'role' and 'content' fields from the original entry.
     :rtype: dict
     """
-
     if isinstance(entry, list):
         new = []
         for el in entry:
             new.append(_strip_entry(el))
         return new
     else:
-        return {'role': entry['role'], 'content': entry['content']}
+        return {"role": entry["role"], "content": entry["content"]}
 
 
 class AssistantHistory:
@@ -51,59 +57,178 @@ class AssistantHistory:
     :param max_tokens: The maximum number of tokens allowed for the conversation history.
     :type max_tokens: int
     :param embedder: A function to embed a string.
-    :type embedder: function
+    :type embedder: function, optional
     :param persist_directory: The directory to store the database in.
-    :type persist_directory: str
+    :type persist_directory: str, optional
     :param chroma_db_impl: The database implementation to use.
-    :type chroma_db_impl: str
+    :type chroma_db_impl: str, optional
+    :param model_injection: Whether to inject the model name into the history.
+    :type model_injection: bool, optional
+    :param time_injection: Whether to inject the time into the history.
+    :type time_injection: bool, optional
     """
 
-    def __init__(self, username, system, tokenizer, summarizer, max_tokens, embedder=None, persist_directory="database",
-                 chroma_db_impl="duckdb+parquet"):
+    def __init__(
+        self,
+        username: str,
+        system: str,
+        tokenizer: callable,
+        summarizer: callable,
+        max_tokens: int,
+        summary_max_tokens: int,
+        embedder: callable = None,
+        persist_directory: str = "database",
+        chroma_db_impl: str = "duckdb+parquet",
+        model_injection: bool = True,
+        time_injection: bool = True,
+    ):
+        """
+        Initialize an instance of AssistantHistory.
+        """
+        self.model_injection = model_injection
+        self.time_injection = time_injection
         self.persist_directory = persist_directory
+        if getattr(sys, 'frozen', False):
+            self.persist_directory = os.path.join(sys._MEIPASS, self.persist_directory)
         self.chroma_db_impl = chroma_db_impl
-        self.client = chromadb.Client(Settings(chroma_db_impl=chroma_db_impl,
-                                               persist_directory=persist_directory,
-                                               anonymized_telemetry=False
-                                               ))
-        if os.path.exists(os.path.join(persist_directory, "AssistantHistoryMetadata.json")):
-            with open(os.path.join(persist_directory, "AssistantHistoryMetadata.json"), "r") as f:
+        self.client = chromadb.Client(
+            Settings(
+                chroma_db_impl=self.chroma_db_impl,
+                persist_directory=self.persist_directory,
+                anonymized_telemetry=False,
+            )
+        )
+        # Load metadata from disk, or create a new metadata file if it doesn't exist.
+        if os.path.exists(os.path.join(self.persist_directory, "AssistantHistoryMetadata.json")):
+            with open(os.path.join(self.persist_directory, "AssistantHistoryMetadata.json"), "r") as f:
                 metadata = json.load(f)
         else:
             metadata = {"current_id": "0", "current_summary_id": "0", "to_summarize": None}
-        self.next_id = int(metadata["current_id"])+1
-        self.next_summary_id = int(metadata["current_summary_id"])+1
+        self.next_id = int(metadata["current_id"]) + 1
+        self.next_summary_id = int(metadata["current_summary_id"]) + 1
         self.to_summarize = metadata["to_summarize"]
 
-        if os.path.exists(os.path.join(persist_directory, "AssistantHistoryLTM.json")):
-            with open(os.path.join(persist_directory, "AssistantHistoryLTM.json"), "r") as f:
+        # Load long-term memory from disk, or create a new LTM file if it doesn't exist.
+        if os.path.exists(os.path.join(self.persist_directory, "AssistantHistoryLTM.json")):
+            with open(os.path.join(self.persist_directory, "AssistantHistoryLTM.json"), "r") as f:
                 ltm = json.load(f)
         else:
             ltm = {"long_term_memory": ""}
         self.long_term_memory = ltm["long_term_memory"]
 
+        # Set instance variables based on input parameters.
         self.username = username
         self.fixed_user = username + "'" if username[-1] == "s" else username + "'s"
         self.system_raw = system
         self.embedder = embedder
         self.max_tokens = max_tokens
+        self.summary_max_tokens = summary_max_tokens
         self.tokenizer = tokenizer
         self.summarizer = summarizer
-        if embedder:
+
+        # Create history and summaries collections using the chromadb client.
+        if self.embedder:
+            self.history = self.client.get_or_create_collection(
+                name="history", embedding_function=self.embedder
+            )
+            self.summaries = self.client.get_or_create_collection(
+                name="summaries", embedding_function=self.embedder
+            )
+        else:
+            self.history = self.client.get_or_create_collection(name="history")
+            self.summaries = self.client.get_or_create_collection(name="summaries")
+
+        if self.next_id > 1:
+            # Check whether the next summary ID is in the history database.
+            expected_summaries = ((self.next_id - 1) / 2)
+            if expected_summaries > self.next_summary_id - 1 and self.to_summarize is None:
+                warnings.warn(
+                    "Summary ID number is less than expected. Adding last two entries to summary queue."
+                )
+                last_two = self.get_history_from_id_and_earlier(n_results=2)
+                self.to_summarize = (last_two[1], last_two[0])
+                self.save_metadata()
+
+            # Delete extra summaries if the next summary ID is greater than the expected number of summaries.
+            expected_history = ((self.next_summary_id - 1) * 2)
+            if expected_history > self.next_id - 1:
+                warnings.warn(
+                    "History ID number is less than expected. Attempting to fix."
+                )
+                while expected_history > self.next_id - 1:
+                    expected_history = ((self.next_summary_id - 1) * 2)
+                    self.summaries.delete([str(self.next_summary_id - 1)])
+                    self.next_summary_id -= 1
+                self.save_metadata()
+            self.current_user_query = None
+
+            # Check whether the next summary ID is in the summaries database.
+            # If it's not, attempt to fix by decrementing the ID until a valid summary is found.
+            # Also, check whether the next ID is in the history database.
+            # If it's not, decrement the ID until a valid entry is found.
+            check_summary = self.summaries.get([str(self.next_summary_id - 1)], include=["documents", "metadatas"])
+            if len(check_summary["ids"]) == 0:
+                warnings.warn(
+                    "Summary ID is not in the database. "
+                    "This is likely because the database was not properly closed. Attempting to fix."
+                )
+                found = False
+                while not found:
+                    history_check = self.history.get([str(self.next_id - 1)], include=["documents", "metadatas"])
+                    if len(history_check["ids"]) == 0:
+                        self.next_id -= 1
+                        metadata["current_id"] = str(self.next_id - 1)
+                    else:
+                        found = True
+                found = False
+                while not found:
+                    summary_check = self.summaries.get([str(self.next_summary_id - 1)], include=["documents", "metadatas"])
+                    if len(summary_check["ids"]) == 0:
+                        self.next_summary_id -= 1
+                        metadata["current_summary_id"] = str(self.next_summary_id - 1)
+                    else:
+                        found = True
+                if not str(self.next_id - 1) in summary_check["metadatas"][0]["source_ids"].split(","):
+                    last_two = self.get_history_from_id_and_earlier(n_results=2)
+                    self.to_summarize = (last_two[1], last_two[0])
+                else:
+                    self.to_summarize = None
+                metadata["to_summarize"] = self.to_summarize
+                self.save_metadata()
+
+    def reload_from_disk(self):
+        """
+        Reload the Assistant's conversation history from disk.
+
+        :return: None
+                """
+        self.client = chromadb.Client(Settings(chroma_db_impl=self.chroma_db_impl,
+                                               persist_directory=self.persist_directory,
+                                               anonymized_telemetry=False
+                                               ))
+        if os.path.exists(os.path.join(self.persist_directory, "AssistantHistoryMetadata.json")):
+            with open(os.path.join(self.persist_directory, "AssistantHistoryMetadata.json"), "r") as f:
+                metadata = json.load(f)
+        else:
+            metadata = {"current_id": "0", "current_summary_id": "0", "to_summarize": None}
+        self.next_id = int(metadata["current_id"]) + 1
+        self.next_summary_id = int(metadata["current_summary_id"]) + 1
+        self.to_summarize = metadata["to_summarize"]
+
+        if os.path.exists(os.path.join(self.persist_directory, "AssistantHistoryLTM.json")):
+            with open(os.path.join(self.persist_directory, "AssistantHistoryLTM.json"), "r") as f:
+                ltm = json.load(f)
+        else:
+            ltm = {"long_term_memory": ""}
+        self.long_term_memory = ltm["long_term_memory"]
+
+        if self.embedder:
             self.history = self.client.get_or_create_collection(name="history", embedding_function=self.embedder)
             self.summaries = self.client.get_or_create_collection(name="summaries", embedding_function=self.embedder)
         else:
             self.history = self.client.get_or_create_collection(name="history")
             self.summaries = self.client.get_or_create_collection(name="summaries")
         self.current_user_query = None
-
-    def save_metadata(self):
-        """
-        Save the metadata to a file.
-        """
-        with open(os.path.join(self.persist_directory, "AssistantHistoryMetadata.json"), "w") as f:
-            json.dump({"current_id": self.next_id-1, "current_summary_id": self.next_summary_id-1,
-                       "to_summarize": self.to_summarize}, f)
 
     def create_chat_id(self):
         """
@@ -136,7 +261,7 @@ class AssistantHistory:
         with open(os.path.join(self.persist_directory, "AssistantHistoryLTM.json"), "w") as f:
             json.dump({"long_term_memory": self.long_term_memory}, f)
 
-    def count_tokens_text(self, text):
+    def count_tokens_text(self, text: str) -> int:
         """
         Count the number of tokens in the given text.
 
@@ -147,7 +272,7 @@ class AssistantHistory:
         """
         return len(self.tokenizer(text))
 
-    def count_tokens_context(self, ls):
+    def count_tokens_context(self, ls: list) -> int:
         """
         Count the total number of tokens in a list of conversation entries.
 
@@ -165,7 +290,7 @@ class AssistantHistory:
                 total += self.count_tokens_text(el['content'])
         return total
 
-    def add_user_query(self, query, role="user"):
+    def add_user_query(self, query: str, role: str = "user") -> None:
         """
         Add a user query to the conversation history.
 
@@ -175,20 +300,28 @@ class AssistantHistory:
         :type role: str
         """
         time_str, utc_time = get_time()
-        self.current_user_query = {"role": role, "content":  time_str + query, "utc_time": utc_time}
+        if self.time_injection:
+            query = time_str + query
+        self.current_user_query = {"role": role, "content": query, "utc_time": utc_time}
 
-    def add_assistant_response(self, response):
+    def add_assistant_response(self, response: str, model: str) -> None:
         """
         Add an assistant response to the conversation history.
 
         :param response: The assistant response to be added.
         :type response: str
+        :param model: The model that generated the response.
+        :type model: str
         """
         if self.current_user_query is None:
             raise ValueError("No user query found. Add a user query before adding an assistant response.")
         time_str, utc_time = get_time()
         self.current_user_query['id'] = self.create_chat_id()
-        assistant_response = {"role": "assistant", "content": time_str + response,
+        if self.time_injection:
+            response = time_str + response
+        if self.model_injection:
+            response = "Source AI Model: " + model + " - " + response
+        assistant_response = {"role": "assistant", "content": response,
                               "id": self.create_chat_id(), "utc_time": utc_time,
                               "pair_id": self.current_user_query['id']}
         self.current_user_query['pair_id'] = assistant_response['id']
@@ -199,6 +332,7 @@ class AssistantHistory:
         assistant_response_metadata = {"role": assistant_response['role'],
                                        "pair_id": assistant_response['pair_id'],
                                        "utc_time": assistant_response['utc_time'],
+                                       "model": model,
                                        "num_tokens": self.count_tokens_text(assistant_response['content'])}
         self.history.add(
             embeddings=[self.embedder(self.current_user_query['content']),
@@ -212,13 +346,13 @@ class AssistantHistory:
         self.current_user_query = None
         self.client.persist()
 
-    def reset_add(self):
+    def reset_add(self) -> None:
         """
         Reset the current user query.
         """
         self.current_user_query = None
 
-    def get_system(self):
+    def get_system(self) -> dict:
         """
         Generate a system message containing user's AI Assistant's name and the current date time.
 
@@ -231,7 +365,7 @@ class AssistantHistory:
         system = re.sub("LONG_TERM_MEMORY_INJECTION", self.long_term_memory, system)
         return {"role": "system", "content": system}
 
-    def reduce_context(self):
+    def reduce_context(self) -> None:
         """
         Reduce the conversation history by summarizing it.
         """
@@ -247,12 +381,39 @@ class AssistantHistory:
             documents=[new_summary['content']],
             ids=[self.create_summary_id()],
         )
-        self.long_term_memory = self.summarizer(self.gather_context("", only_summaries=True))["content"]
+        self.long_term_memory = self.summarizer(
+            self.gather_context("", only_summaries=True,
+                                max_tokens=(self.summary_max_tokens -
+                                            self.count_tokens_text(self.long_term_memory))))["content"]
         self.save_ltm()
 
-    def gather_context(self, query, minimum_recent_history_length=2, max_tokens=None,
-                       only_summaries=False, only_role_and_content=True,
-                       distance_cut_off=None, query_max_size=30):
+    def load_metadata(self):
+        """
+        Load metadata from the JSON file.
+        """
+        try:
+            with open(os.path.join(self.persist_directory, "AssistantHistoryMetadata.json"), "r") as f:
+                data = json.load(f)
+                self.next_id = data["next_id"]
+                self.next_summary_id = data["next_summary_id"]
+                self.history.load(os.path.join(self.persist_directory, "AssistantHistory"),
+                                  embeddings_storage=os.path.join(self.persist_directory, "embeddings"))
+                self.summaries.load(os.path.join(self.persist_directory, "AssistantSummaries"),
+                                    embeddings_storage=os.path.join(self.persist_directory, "embeddings"))
+        except FileNotFoundError:
+            pass
+
+    def save_metadata(self):
+        """
+        Save metadata to the JSON file.
+        """
+        with open(os.path.join(self.persist_directory, "AssistantHistoryMetadata.json"), "w") as f:
+            json.dump({"current_id": self.next_id-1, "current_summary_id": self.next_summary_id-1,
+                       "to_summarize": self.to_summarize}, f)
+
+    def gather_context(self, query: str, minimum_recent_history_length: int = 2, max_tokens: int = None,
+                       only_summaries: bool = False, only_role_and_content: bool = True,
+                       distance_cut_off: float = None, query_max_size: int = 30) -> List[dict]:
         """
         Gathers relevant context for a given query from the chat assistant's history.
 
@@ -271,10 +432,10 @@ class AssistantHistory:
         :param query_max_size: The maximum number results to return from full context query, defaults to 30
         :type query_max_size: int, optional
         :return: A list of relevant context entries for the given query
-        :rtype: list
+        :rtype: List[dict]
         """
         if max_tokens is None:
-            max_tokens = int(0.85*self.max_tokens)
+            max_tokens = int(0.85 * self.max_tokens)
         if not only_summaries:
             context_list = []
             id_added = []
@@ -283,7 +444,7 @@ class AssistantHistory:
 
             # Add the most recent history entries
             if minimum_recent_history_length > 0:
-                recent_ids = list(range(self.next_id - (minimum_recent_history_length*2), self.next_id))
+                recent_ids = list(range(self.next_id - (minimum_recent_history_length * 2), self.next_id))
                 recent_ids = [str(x) for x in recent_ids]
                 result = self.history.get(recent_ids, include=['documents', 'metadatas'])
                 for id in recent_ids:
@@ -299,7 +460,7 @@ class AssistantHistory:
                     except ValueError:
                         continue
 
-            # If the context is too short, query the fullt history
+            # If the context is too short, query the full history
             if token_count > max_tokens:
                 query_size = query_max_size
                 if query_size > self.next_id - 1:
@@ -319,7 +480,8 @@ class AssistantHistory:
                             id_added.append(id)
                             context_list.insert(0, entry)
                             token_count += entry["num_tokens"]
-                            matched_data = self.history.get(entry["pair_id"], include=['documents', 'metadatas'])
+                            matched_data = self.history.get(entry["pair_id"],
+                                                            include=['documents', 'metadatas'])
                             match_entry = matched_data["metadatas"][0]
                             match_entry["content"] = matched_data["documents"][0]
                             if token_count + match_entry["num_tokens"] > max_tokens:
@@ -332,7 +494,8 @@ class AssistantHistory:
                             id_added.append(id)
                             context_list.insert(0, entry)
                             token_count += entry["num_tokens"]
-                            matched_data = self.history.get(entry["pair_id"], include=['documents', 'metadatas'])
+                            matched_data = self.history.get(entry["pair_id"],
+                                                            include=['documents', 'metadatas'])
                             match_entry = matched_data["metadatas"][0]
                             match_entry["content"] = matched_data["documents"][0]
                             if token_count + match_entry["num_tokens"] > max_tokens:
@@ -341,28 +504,33 @@ class AssistantHistory:
                             context_list.insert(0, match_entry)
                             token_count += match_entry["num_tokens"]
 
-            # If the context is still too short, query the summaries
-            if token_count > max_tokens:
-                query_size = query_max_size
-                if query_size > self.next_summary_id - 1:
-                    query_size = self.next_summary_id - 1
-                query_summaries = self.summaries.search(query, n_results=query_size)
-                for id in query_summaries["ids"][0]:
-                    if id not in summary_ids:
-                        result_pos = query_summaries["ids"][0].index(id)
-                        entry = query_summaries["metadatas"][0][result_pos]
-                        if token_count + entry["num_tokens"] > max_tokens:
-                            break
-                        if distance_cut_off is not None:
-                            if query_summaries["distances"][0]["result_pos"] < distance_cut_off:
+                # If the context is still too short, query the summaries
+                if token_count > max_tokens:
+                    query_size = query_max_size
+                    if query_size > self.next_summary_id - 1:
+                        query_size = self.next_summary_id - 1
+                    query_summaries = self.summaries.search(query, n_results=query_size)
+                    for id in query_summaries["ids"][0]:
+                        if id not in summary_ids:
+                            result_pos = query_summaries["ids"][0].index(id)
+                            entry = query_summaries["metadatas"][0][result_pos]
+                            if token_count + entry["num_tokens"] > max_tokens:
                                 break
-                        if not (entry["source_ids"].split(",")[0] in id_added and
-                                entry["source_ids"].split(",")[1] in id_added):
-                            entry["content"] = query_summaries["documents"][0][result_pos]
-                            summary_ids.append(id)
-                            summary_ids.insert(0, entry)
-                            token_count += entry["num_tokens"]
+                            if distance_cut_off is not None:
+                                if query_summaries["distances"][0]["result_pos"] < distance_cut_off:
+                                    break
+                            if not (entry["source_ids"].split(",")[0] in id_added and
+                                    entry["source_ids"].split(",")[1] in id_added):
+                                entry["content"] = query_summaries["documents"][0][result_pos]
+                                summary_ids.append(id)
+                                summary_ids.insert(0, entry)
+                                token_count += entry["num_tokens"]
 
+            else:
+                context_list = []
+                summary_ids = []
+                id_added = []
+                token_count = 0
         else:
             context_list = []
             summary_ids = []
@@ -390,7 +558,6 @@ class AssistantHistory:
 
         return [self.get_system()] + context_list
 
-
     def get_history(self):
         """
         Returns the history of the chat assistant
@@ -399,3 +566,35 @@ class AssistantHistory:
         :rtype: list
         """
         return self.history
+
+    def get_history_from_id_and_earlier(self, id=None, n_results=10, reload_disk=False):
+        """
+        Returns the history of the chat assistant from a given id and earlier
+
+        :param id: The id to start from
+        :type id: int
+        :param n_results: The number of results to return
+        :type n_results: int
+        :param reload_disk: If the history should be reloaded from disk
+        :type reload_disk: bool
+        :return: The history
+        :rtype: list
+        """
+        if reload_disk:
+            self.reload_from_disk()
+        if id is None:
+            id = self.next_id-1
+        else:
+            id = int(id)
+        target_ids = list(range(id, id-n_results, -1))
+        target_ids = [str(x) for x in target_ids if x > 0]
+        output = []
+        results = self.history.get(target_ids, include=['documents', 'metadatas'])
+        for tid in target_ids:
+            if tid in results["ids"]:
+                pos = results["ids"].index(tid)
+                entry = results["metadatas"][pos]
+                entry["content"] = results["documents"][pos]
+                entry["id"] = tid
+                output.append(entry)
+        return output
