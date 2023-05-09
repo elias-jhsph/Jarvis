@@ -465,7 +465,7 @@ def set_google_key_and_cx(google_key, google_cx):
     """
     try:
         from googleapiclient.discovery import build
-        service = build("customsearch", "v1", developerKey=google_key)
+        service = build("customsearch", "v1", developerKey=google_key, static_discovery=False)
         res = service.cse().list(q='test', cx=google_cx).execute()
     except Exception as e:
         raise ConnectionKeyInvalid('Google')

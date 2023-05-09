@@ -7,7 +7,7 @@ openai-whisper
 torch
 PyAudio==0.2.12
 tiktoken
-pvporcupine==2.1.0
+pvporcupine==2.2.0
 google-api-python-client
 google-cloud-texttospeech
 google-cloud-core

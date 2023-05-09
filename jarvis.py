@@ -13,9 +13,14 @@ if 'DYLD_LIBRARY_PATH' in os.environ:
 else:
     os.environ['DYLD_LIBRARY_PATH'] = f"{lib_dir}:{numpy_dir}"
 if getattr(sys, 'frozen', False):
-    # If bundled, set the model path to the bundled directory
+    # If bundled, set the qt web engine path to the bundled directory
     qt_locals_path = os.path.join(sys._MEIPASS, 'qtwebengine_locales')
     os.environ['QTWEBENGINE_LOCALES_PATH'] = qt_locals_path
+    # If bundled, set the ffmpeg path to the bundled directory
+    ffmpeg_path = os.path.join(sys._MEIPASS, 'ffmpeg')
+    os.environ['PATH'] = ffmpeg_path + os.pathsep + os.environ['PATH']
+    # If bundled, set the portaudio path to the bundled directory
+
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
@@ -72,6 +77,10 @@ class JarvisApp(QApplication):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         logger.info("CWD " + os.getcwd())
+        prefix = ""
+        if getattr(sys, 'frozen', False):
+            prefix = sys._MEIPASS + "/"
+        self.setStyleSheet(open(prefix + "style.qss", "r").read())
         self.config = {
             "app_name": "Jarvis",
             "start": "Start Listening",

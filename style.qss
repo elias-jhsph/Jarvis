@@ -1,7 +1,15 @@
 /* QMainWindow - Main widget styles */
-QMainWindow {
+QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWebEngineView, QDialog, QFrame {
+  background-color: black;
+}
+
+QListWidget {
   border: 10px solid black;
   background-color: black;
+}
+
+QLabel {
+  color: white;
 }
 
 /* QScrollBar - Dark Theme */
