@@ -278,6 +278,7 @@ def generate_simple_response(history):
             presence_penalty=model["presence_penalty"]
         )
     except openai.error.RateLimitError:
+
         log_model(model["name"])
         model = get_model(error=True)
         response = openai.ChatCompletion.create(
@@ -390,12 +391,12 @@ def get_last_response():
     return history_access.get_history_from_id_and_earlier(n_results=2)
 
 
-def get_chat_db():
+def get_assistant_history() -> AssistantHistory:
     """
-    Get the chat database.
+    Get the entire conversation history.
 
-    :return: The chat database.
-    :rtype: collection
+    :return: the instance of the AssistantHistory class
+    :rtype: AssistantHistory
     """
     return history_access
 

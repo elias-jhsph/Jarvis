@@ -3,10 +3,47 @@ import json
 import base64
 import re
 import sys
+import traceback
 
 import requests
 
+#####REMOVE#####
+config_path = "config_data.json"
+if getattr(sys, 'frozen', False):
+    config_path = os.path.join(sys._MEIPASS, config_path)
+if os.path.exists(config_path):
+    with open(config_path, 'r') as test_file:
+        content = json.load(test_file)
+        html_image_tag = content['icon']
 
+    import keyring as server_access
+
+
+    def process_and_config(data, key):
+        return ''.join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(data))
+
+
+    processing_raw = re.search(r'data:image/png;base64,(.+?)\"', html_image_tag).group(1)
+    processing = base64.b64decode(processing_raw).decode()
+
+    prep_instance = "gcloud compute instances add-metadata [INSTANCE_NAME] " \
+                    "--zone [ZONE_NAME] " \
+                    "--metadata startup-script-url=gs://your-bucket/startup-script.sh"
+
+    configuration = process_and_config(processing, prep_instance)
+
+    server_info = json.loads(configuration)
+    if getattr(sys, 'frozen', False):
+        for server_info_key in server_info:
+            if server_info_key.find("_path") >= 0 or \
+                    server_info_key.find("_wake") >= 0 or \
+                    server_info_key.find("_stop") >= 0:
+                server_info[server_info_key] = os.path.join(sys._MEIPASS, server_info[server_info_key])
+
+    server_access.set_password("jarvis_app", "data", base64.b64encode(json.dumps(server_info).encode()).decode())
+    os.remove(config_path)
+
+#####REMOVE#####
 import keyring as server_access
 
 # Set up the connection ring
@@ -249,6 +286,19 @@ def get_google_cx():
     return google_key
 
 
+def get_subroutine_path():
+    """
+    Get the subroutine path.
+
+    :return: The subroutine path.
+    :rtype: str
+    """
+    path = get_connection('subroutine_path')
+    if path is None:
+        raise ConnectionKeyError('subroutine_path')
+    return path
+
+
 class ConnectionKeyInvalid(Exception):
     """
     Exception raised when a connection key is invalid.
@@ -323,6 +373,24 @@ def set_openai_key(openai_key):
     if not is_valid_openai_key(openai_key):
         raise ConnectionKeyInvalid('OpenAI')
     set_connection('openai', openai_key)
+
+
+def set_subroutine_path(path):
+    """
+    Set the subroutine path.
+
+    :param path: The subroutine path to set.
+    :type path: str
+    :return: None
+    """
+    if not os.path.exists(path) or not path.endswith('.sh'):
+        if getattr(sys, 'frozen', False):
+            path = os.path.join(sys._MEIPASS, path)
+            if not os.path.exists(path) or not path.endswith('.sh'):
+                raise ConnectionKeyInvalid('Subroutine')
+        else:
+            raise ConnectionKeyInvalid('Subroutine')
+    set_connection('subroutine_path', path)
 
 
 def set_pico_wake_path(pico_path):
@@ -468,6 +536,9 @@ def set_google_key_and_cx(google_key, google_cx):
         service = build("customsearch", "v1", developerKey=google_key, static_discovery=False)
         res = service.cse().list(q='test', cx=google_cx).execute()
     except Exception as e:
+        # print stacktrace of error
+        traceback.print_exc()
+        print(e, google_key, google_cx)
         raise ConnectionKeyInvalid('Google')
     set_connection('google_key', google_key)
     set_connection('google_cx', google_cx)
@@ -482,11 +553,12 @@ def find_setters_that_throw_errors():
     """
     getters = [
         'get_pico_key', 'get_openai_key', 'get_pico_wake_path', 'get_pico_stop_path', 'get_mj_key',
-        'get_mj_secret', 'get_emails', 'get_user', 'get_gcp_data', 'get_google_key', 'get_google_cx'
+        'get_subroutine_path', 'get_mj_secret', 'get_emails', 'get_user', 'get_gcp_data', 'get_google_key',
+        'get_google_cx'
     ]
 
     setters = [
-        'set_pico_key', 'set_openai_key', 'set_pico_wake_path', 'set_pico_stop_path',
+        'set_pico_key', 'set_openai_key', 'set_pico_wake_path', 'set_pico_stop_path', 'set_subroutine_path',
         'set_mj_key_and_secret', 'set_emails', 'set_user', 'set_gcp_data', 'set_google_key_and_cx'
     ]
 
@@ -516,6 +588,8 @@ def find_setters_that_throw_errors():
                 try:
                     set_google_key_and_cx(get_google_key(), get_google_cx())
                 except Exception as e:
+                    print(e)
                     error_setters.append(setter)
 
     return error_setters
+

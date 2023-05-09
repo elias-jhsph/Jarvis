@@ -23,7 +23,7 @@ class SettingsDialog(QDialog):
         self.list_widget = QListWidget()
         self.list_widget.itemClicked.connect(self.handle_click)
         self.set_list_widget_style()
-        self.setMinimumSize(350, 530)
+        self.setMinimumSize(350, 560)
 
         choices = [
             'Set User',
@@ -35,6 +35,7 @@ class SettingsDialog(QDialog):
             'Set Pico Path to stop word .ppn (Optional)',
             'Set Google Key and CX (Optional)',
             'Set GCP JSON Path (Recommended)',
+            'Set Subroutine Path (Experimental)',
         ]
 
         for choice in choices:
@@ -71,7 +72,8 @@ class SettingsDialog(QDialog):
             'Set Pico Path to wake word .ppn (Optional)': 'set_pico_wake_path',
             'Set Pico Path to stop word .ppn (Optional)': 'set_pico_stop_path',
             'Set Google Key and CX (Optional)': 'set_google_key_and_cx',
-            'Set GCP JSON Path (Recommended)': 'set_gcp_data'
+            'Set GCP JSON Path (Recommended)': 'set_gcp_data',
+            'Set Subroutine Path (Experimental)': 'set_subroutine_path',
         }
 
         for i in range(self.list_widget.count()):
@@ -125,7 +127,8 @@ class SettingsDialog(QDialog):
             'Set Pico Path to wake word .ppn (Optional)': set_pico_wake_path,
             'Set Pico Path to stop word .ppn (Optional)': set_pico_stop_path,
             'Set Google Key and CX (Optional)': set_google_key_and_cx,
-            'Set GCP JSON Path (Recommended)': set_gcp_data
+            'Set GCP JSON Path (Recommended)': set_gcp_data,
+            'Set Subroutine Path (Experimental)': set_subroutine_path
         }
 
         try:

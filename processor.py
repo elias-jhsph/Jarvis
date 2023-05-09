@@ -6,7 +6,7 @@ from mailjet_rest import Client
 from connections import get_mj_key, get_mj_secret, get_emails, \
     ConnectionKeyError, get_user
 from gpt_interface import generate_response, get_last_response, \
-    stream_response, resolve_stream_response, get_model, generate_simple_response, get_chat_db
+    stream_response, resolve_stream_response, get_model, generate_simple_response, get_assistant_history
 from streaming_response_audio import stream_audio_response, set_rt_text_queue
 from internet_helper import create_internet_context
 from text_speech import text_to_speech
@@ -495,5 +495,5 @@ def get_chat_history(id=None, limit=10, reload_disk=False):
     :param reload_disk: bool, whether to reload the chat history from disk
     :return: list, a list of chat history entries
     """
-    output = get_chat_db().get_history_from_id_and_earlier(id=id, n_results=limit, reload_disk=reload_disk)
+    output = get_assistant_history().get_history_from_id_and_earlier(id=id, n_results=limit, reload_disk=reload_disk)
     return output

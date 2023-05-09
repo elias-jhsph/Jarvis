@@ -15,7 +15,12 @@ brew install upx
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
-3. To package the app:
+3. To use the subroutine commands you need to install Auto-GPT and you will also need tmux installed:
+https://github.com/Significant-Gravitas/Auto-GPT
+```
+brew install tmux
+```
+4. To package the app:
    (Make sure to select 'y' for public because the api keys are not in this repo)
 ```
 pyinstaller jarvis_dynamic_installer.spec
@@ -48,6 +53,11 @@ If you combine either of those specified above with the word email, Jarvis will 
 If you include the word "reminder" in your query, Jarvis will send you an email right away with what you said as the reminder or create an email draft and open it in your default email app.
 
 In addition to these specific voice commands, you can also speak more generally, and the app will try to interpret your request. You don't need to use any commands other than the wake word and speaking - the app listens and responds automatically.
+
+### Auto-GPT Subroutines
+If you have Auto-GPT installed Jarvis will be able to help you manage Auto-GPT background tasks.
+It will be able to interpret many commands automatically and will interrupt you when information is needed.
+Just mention "subroutine" in your query and Jarvis will try to help you set up and Auto-GPT background task.
 
 ## Settings Menu
 

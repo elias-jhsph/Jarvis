@@ -13,6 +13,7 @@ from audio_player import play_audio_file, get_next_audio_frame, start_audio_stre
 from audio_listener import prep_mic, listen_to_user, convert_to_text
 from connections import ConnectionKeyError, get_pico_key, get_pico_wake_path, get_gcp_data
 from processor import processor, get_model_name, get_chat_history
+from subroutine_processor import subroutine_processor
 from text_speech import text_to_speech
 
 # Configure logging
@@ -91,17 +92,20 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
             free_wake = True
             from pocketsphinx import LiveSpeech
 
-            def pocketsphinx_wake_word_detection(wake_word, stop_event):
+            def pocketsphinx_wake_word_detection(wake_word, stop_event, sub_queue):
                 """
                 Detects wake word using pocketsphinx.
                 :param wake_word:
                 :param stop_event:
+                :param sub_queue:
                 :return:
                 """
                 speech = LiveSpeech()
                 for phrase in speech:
+                    if not sub_queue.is_empty():
+                        return sub_queue.get()
                     if str(phrase).lower() == wake_word.lower():
-                        return True
+                        return ""
                     if stop_event.is_set():
                         break
                 return False
@@ -129,6 +133,9 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
         if not free_wake:
             start_audio_stream(handle.sample_rate, handle.frame_length)
 
+        # Prep subroutine multiprocessing queue
+        subroutine_queue = None
+
         # Main loop for processing user input
         try:
             queue.put("standby")
@@ -142,8 +149,12 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
                     jarvis_skip_event.clear()
 
                 # Detect wake word
+                pocketsphinx_collected_message = ""
                 if free_wake:
-                    if pocketsphinx_wake_word_detection("Jarvis", jarvis_stop_event):
+                    pocketsphinx_collected_message = pocketsphinx_wake_word_detection("Jarvis",
+                                                                                      jarvis_stop_event,
+                                                                                      subroutine_queue)
+                    if pocketsphinx_collected_message == "":
                         detected = True
                 else:
                     pcm = get_next_audio_frame(handle)
@@ -151,7 +162,25 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
                         keyword_index = handle.process(pcm)
                     if keyword_index >= 0:
                         detected = True
-
+                if subroutine_queue is not None or pocketsphinx_collected_message != "":
+                    if not subroutine_queue.empty() or pocketsphinx_collected_message != "":
+                        if pocketsphinx_collected_message != "":
+                            message = pocketsphinx_collected_message
+                        else:
+                            message = subroutine_queue.get()
+                        if message == "pause":
+                            logger.info("Pausing for subroutine...")
+                            subroutine_queue.put("go")
+                            time.sleep(2)
+                            # wait for subroutine to finish
+                            while not subroutine_queue.empty() and \
+                                    not jarvis_stop_event.is_set() and \
+                                    not jarvis_skip_event.is_set():
+                                time.sleep(0.1)
+                            message = subroutine_queue.get()
+                            if message != "resume":
+                                logger.error("Subroutine did not return resume message.")
+                                play_audio_file(check_tts('audio_files/major_error.wav'))
                 # Process user input if wake word detected
                 if detected:
                     detected = False
@@ -184,7 +213,6 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
                             # Recognize user query
                             logger.info("Recognizing...")
                             query = convert_to_text(query_audio)
-                            text_queue.put({"role": "user", "content": query})
                             if graceful_skip_loop():
                                 continue
                             if not re.search('[a-zA-Z]', query):
@@ -193,7 +221,15 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
 
                             # Process user query
                             logger.info("Processing...")
-                            text = processor(query, beeps_stop_event, skip=jarvis_skip_event, text_queue=text_queue)
+                            if query.lower().find("subroutine") != -1:
+                                beeps_stop_event.set()
+                                subroutine_queue = subroutine_processor(query, subroutine_queue,
+                                                                        jarvis_stop_event=jarvis_stop_event,
+                                                                        jarvis_skip_event=jarvis_skip_event)
+                                text = None
+                            else:
+                                text_queue.put({"role": "user", "content": query})
+                                text = processor(query, beeps_stop_event, skip=jarvis_skip_event, text_queue=text_queue)
                             if graceful_skip_loop():
                                 continue
                         except TypeError as e:
@@ -232,7 +268,12 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
                         play_audio_file(check_tts('audio_files/minor_error.wav'))
                     if not free_wake:
                         start_audio_stream(handle.sample_rate, handle.frame_length)
-
+                if free_wake:
+                    if pocketsphinx_thread.is_alive() is False:
+                        # create pocketsphinx thread
+                        pocketsphinx_thread = threading.Thread(target=pocketsphinx_wake_word_detection,
+                                                               args=("Jarvis", jarvis_stop_event))
+                        pocketsphinx_thread.start()
             stop_audio_stream()
         except Exception as e:
             logger.error(e, exc_info=True)
@@ -246,6 +287,8 @@ def jarvis_process(jarvis_stop_event: threading.Event, jarvis_skip_event: thread
         play_audio_file(check_tts('audio_files/connection_error.wav'))
 
     # Cleanup
+    if subroutine_queue is not None:
+        subroutine_queue.put("user kill")
     if not free_wake:
         atexit.unregister(handle.delete)
         handle.delete()

@@ -344,7 +344,7 @@ def generate_final_prompt(simplified_output: dict, max_tokens: int = 1800) -> st
         new = enc.encode(ranked_summaries_text)
         if len(new) < diff+10:
             raise Exception("Could not shrink internet final prompt within limit!")
-        prompt = pre_prompt + ranked_summaries_text[:-(diff+10)] + post_prompt
+        prompt = pre_prompt + truncate_content(ranked_summaries_text, len(new) - (diff+10)) + post_prompt
     return prompt
 
 
