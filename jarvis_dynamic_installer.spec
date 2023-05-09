@@ -74,21 +74,10 @@ for file in os.listdir("whisper_models"):
 app_name = "Jarvis"
 script_name = "jarvis.py"
 
-audio_files = [(os.path.join("audio_files", file), "audio_files") for file in ['beeps.wav', 'booting.wav', 'go_on.wav',
-                     'hmm.wav', 'listening.wav', 'major_error.wav', 'mic_error.wav', 'minor_error.wav',
-                     'ready_in.wav', 'standard_response.wav', 'thinking.wav', 'tone_one.wav', 'tone_two.wav',
-                     'yes.wav', 'searching.wav', 'connection_error.wav']]
-
-free_audio_files = [(os.path.join("free_audio_files", file), "free_audio_files") for file in ['beeps.wav', 'booting.wav', 'go_on.wav',
-                          'hmm.wav', 'listening.wav', 'major_error.wav', 'mic_error.wav', 'minor_error.wav',
-                          'ready_in.wav', 'standard_response.wav', 'thinking.wav', 'tone_one.wav', 'tone_two.wav',
-                          'yes.wav', 'searching.wav', 'connection_error.wav']]
-
-icons = [(os.path.join("icons", file), "icons") for file in ['icon.icns', 'listening.icns', 'processing_middle.icns',
-               'processing_small.icns']]
-
+audio_files = [(os.path.join("audio_files", file), "audio_files") for file in os.listdir("audio_files")]
+free_audio_files = [(os.path.join("free_audio_files", file), "free_audio_files") for file in os.listdir("free_audio_files")]
+icons = [(os.path.join("icons", file), "icons") for file in os.listdir("icons")]
 pico_models_list = [(os.path.join("pico_models", file), "pico_models") for file in pico_models_list]
-
 whisper_models_list = [(os.path.join("whisper_models", file), "whisper_models") for file in whisper_models_list]
 
 # Collect model data
@@ -136,13 +125,26 @@ data_files = [
 if public:
     data_files = data_files[2:]
 
+# Binaries
+ffmpeg_path = subprocess.run(["which", "ffmpeg"], capture_output=True).stdout.decode("utf-8").strip()
+if ffmpeg_path == "":
+    raise FileNotFoundError("ffmpeg not found! Please install ffmpeg and try again.")
+ffmpeg_binary = [(ffmpeg_path, 'ffmpeg')]
+# find /usr/local -name "libportaudio.dylib*"
+portaudio_path = subprocess.run(["find", "/usr/local", "-name",
+                                 "libportaudio.dylib*"], capture_output=True).stdout.decode("utf-8").strip()
+portaudio_path = portaudio_path.split("\n")[0]
+if portaudio_path == "":
+    raise FileNotFoundError("portaudio not found! Please install portaudio and try again.")
+portaudio_binary = [(portaudio_path, 'portaudio')]
+
 a = Analysis(
     ["jarvis.py", "audio_player.py", "internet_helper.py", "logger_config.py",
      "streaming_response_audio.py", "animation.py", "connections.py", "processor.py",
      "text_speech.py", "assistant_history.py", "jarvis_interrupter.py", "settings.py",
      "viewer_window.py", "audio_listener.py", "gpt_interface.py", "jarvis_process.py", "settings_menu.py"],
     pathex=[],
-    binaries=torch_binaries,
+    binaries=torch_binaries + ffmpeg_binary + portaudio_binary,
     datas=data_files,
     hiddenimports=["tqdm"]+torch_hiddenimports,
     hookspath=[],

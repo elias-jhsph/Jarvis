@@ -150,7 +150,7 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
         query, result = get_last_response()
         return email_processor("Jarvis responding to question: "+query['content'][:150]+"...", result['content'])
 
-    # Handle email queries
+    # Handle "the following" queries
     if test_str.find("the following") >= 0:
         # Handle emailing
         if test_str.find("email") >= 0:
@@ -236,8 +236,54 @@ def processor(raw_query, stop_audio_event, skip=None, text_queue=None):
                 return "Sorry."
             return response
 
+    # Handle email queries
+    if test_str.find("email") >= 0:
+        # Handle emailing an internet query
+        if internet_words_in(test_str):
+            query = clean_up_query(raw_query)
+            if not re.search('[a-zA-Z]', query):
+                return "I'm so sorry I didn't catch that. I think I cut you off."
+            file = text_to_speech('Searching the internet for your query, "' + query +
+                                  '". I will let you know when I am done working on that email.')
+            stop_audio_event.set()
+            play_audio_file(file, blocking=False, destroy=True, added_stop_event=skip)
+            if skip.is_set():
+                return "Sorry."
+            response, data = internet_processor(query, stream=False, skip=skip)
+            if skip.is_set():
+                return "Sorry."
+            output = email_processor("Jarvis searched for: " + query, response + "\n\n```" +
+                                     json.dumps(data, indent=5) + "```")
+            if skip.is_set():
+                return "Sorry."
+            file = text_to_speech(output, model=get_model()['name'])
+            if skip.is_set():
+                return "Sorry."
+            play_audio_file(file, blocking=True, destroy=True, added_stop_event=skip)
+            if skip.is_set():
+                return "Sorry."
+            return output
+        else:
+            query = clean_up_query(raw_query)
+            if not re.search('[a-zA-Z]', query):
+                return "I'm so sorry I didn't catch that. I think I cut you off."
+            file = text_to_speech("Emailing you my response to: " + query)
+            stop_audio_event.set()
+            play_audio_file(file, blocking=False, destroy=True, added_stop_event=skip)
+            if skip.is_set():
+                return "Sorry."
+            output = email_processor("Jarvis responding to question: " + query, generate_response(query))
+            if skip.is_set():
+                return "Sorry."
+            file = text_to_speech(output, model=get_model()['name'])
+            if skip.is_set():
+                return "Sorry."
+            play_audio_file(file, blocking=True, destroy=True, added_stop_event=skip)
+            if skip.is_set():
+                return "Sorry."
+            return output
     # Handle internet queries
-    if internet_words_in(test_str):
+    elif internet_words_in(test_str):
         query = clean_up_search_smart(raw_query)
         if not re.search('[a-zA-Z]', query):
             return "I'm so sorry I didn't catch that. I think I cut you off."

@@ -1,6 +1,5 @@
 import atexit
-import ctypes.util
-import functools
+import pyaudio
 import os
 import sys
 import time
@@ -13,46 +12,6 @@ from numpy import linspace, int16, sqrt, maximum, mean, square, frombuffer
 import logger_config
 logger = logger_config.get_logger()
 
-
-def import_pyaudio():
-    """
-    Import pyaudio with a patched version of ctypes.util.find_library.
-    """
-    logger.info("Attempting to import pyaudio using patched `ctypes.util.find_library`...")
-    _find_library_original = ctypes.util.find_library
-
-    @functools.wraps(_find_library_original)
-    def _find_library_patched(name):
-        """
-        Patched version of ctypes.util.find_library to help importing pyaudio.
-
-        :param name: str, the name of the library to find
-        :type name: str
-        :return: str, the path to the library, if found, otherwise the result of the original find_library function
-        :rtype: str
-        """
-        if name == "portaudio":
-            return "libportaudio.so.2"
-        else:
-            return _find_library_original(name)
-
-    ctypes.util.find_library = _find_library_patched
-
-    import pyaudio
-
-    logger.info("pyaudio import successful!")
-    logger.info("Restoring original `ctypes.util.find_library`...")
-    ctypes.util.find_library = _find_library_original
-    del _find_library_patched
-    logger.info("Original `ctypes.util.find_library` restored.")
-
-    return pyaudio
-
-
-if os.getcwd() != '/Users/eliasweston-farber/Desktop/Jarvis':
-    pyaudio = import_pyaudio()
-else:
-    import pyaudio
 pa = pyaudio.PyAudio()
 audio_stream = None
 

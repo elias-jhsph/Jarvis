@@ -3,7 +3,7 @@ import urllib
 import sys
 import datetime
 
-from PySide6.QtCore import Qt, QTimer, QFile, QTextStream
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy
 from PySide6.QtGui import QMovie, QColor, QPainter, QPainterPath
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -11,22 +11,6 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from processor import get_chat_history
 from animation import JarvisWaveform
 from multiprocessing import Queue
-
-
-def load_stylesheet() -> str:
-    """
-    Load the stylesheet for the application.
-
-    :return: The stylesheet content.
-    :rtype: str
-    """
-    prefix = ""
-    if getattr(sys, 'frozen', False):
-        prefix = sys._MEIPASS + "/"
-    file = QFile(prefix+"style.qss")
-    file.open(QFile.ReadOnly | QFile.Text)
-    stream = QTextStream(file)
-    return stream.readAll()
 
 
 def format_message(text: str) -> str:
@@ -131,9 +115,12 @@ class ChatWindow(QMainWindow):
         The user interface consists of a chat history area and a real-time message area, along with a JarvisWaveform
         widget for visualizing speech.
         """
+        prefix = ""
+        if getattr(sys, 'frozen', False):
+            prefix = sys._MEIPASS + "/"
+        self.setStyleSheet(open(prefix + "style.qss", "r").read())
         self.setWindowTitle("Jarvis Assistant History and Chat")
         self.resize(800, 600)
-        self.setStyleSheet(load_stylesheet())
         self.central_widget = QWidget(self)
         self.setCentralWidget(self.central_widget)
 
@@ -218,8 +205,6 @@ class ChatWindow(QMainWindow):
         self.chat_area_history.loadFinished.connect(self.load_initial_chat_history)
         self.chat_area_history.loadFinished.connect(self.scroll_check_timer.start(2000))
         self.chat_area_realtime.loadFinished.connect(update_chat_timer())
-        self.chat_area_history.setStyleSheet("background-color: black;")
-        self.chat_area_realtime.setStyleSheet("background-color: black;")
 
     def attach_queue(self, queue):
         """
@@ -648,6 +633,7 @@ class ChatWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication([])
+    app.setStyleSheet(open("style.qss", "r").read())
     queue = Queue()
     main_window = ChatWindow()
     main_window.attach_queue(queue)

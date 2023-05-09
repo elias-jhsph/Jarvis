@@ -22,6 +22,10 @@ class SettingsDialog(QDialog):
 
         self.list_widget = QListWidget()
         self.list_widget.itemClicked.connect(self.handle_click)
+        prefix = ""
+        if getattr(sys, 'frozen', False):
+            prefix = sys._MEIPASS + "/"
+        self.setStyleSheet(open(prefix + "style.qss", "r").read())
         self.set_list_widget_style()
         self.setMinimumSize(350, 530)
 
