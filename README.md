@@ -15,6 +15,10 @@ brew install upx
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 ```
+If Pyaudio doesn't install try
+```
+ sudo pip install --global-option='build_ext' --global-option='-I/opt/local/include' --global-option='-L/opt/local/lib' pyaudio
+```
 3. To package the app:
    (Make sure to select 'y' for public because the api keys are not in this repo)
 ```

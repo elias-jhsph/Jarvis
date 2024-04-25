@@ -5,9 +5,8 @@ numpy
 openai
 openai-whisper
 torch
-PyAudio==0.2.12
 tiktoken
-pvporcupine==2.2.0
+pvporcupine==2.1.0
 google-api-python-client
 google-cloud-texttospeech
 google-cloud-core
@@ -20,5 +19,6 @@ PySide6
 gtts
 pydub
 googlesearch-python
-pocketsphinx
+openwakeword
 chromadb==0.3.21
+PyAudio==0.2.13
